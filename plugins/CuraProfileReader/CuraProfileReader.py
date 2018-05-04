@@ -1,11 +1,12 @@
-# Copyright (c) 2016 Ultimaker B.V.
-# Cura is released under the terms of the AGPLv3 or higher.
+# Copyright (c) 2018 Ultimaker B.V.
+# Cura is released under the terms of the LGPLv3 or higher.
 import configparser
 
-from UM import PluginRegistry
+from UM.PluginRegistry import PluginRegistry
 from UM.Logger import Logger
+from UM.Settings.ContainerFormatError import ContainerFormatError
 from UM.Settings.InstanceContainer import InstanceContainer  # The new profile to make.
-from cura.ProfileReader import ProfileReader
+from cura.ReaderWriters.ProfileReader import ProfileReader
 
 import zipfile
 
@@ -39,7 +40,7 @@ class CuraProfileReader(ProfileReader):
 
         except zipfile.BadZipFile:
             # It must be an older profile from Cura 2.1.
-            with open(file_name, encoding="utf-8") as fhandle:
+            with open(file_name, encoding = "utf-8") as fhandle:
                 serialized = fhandle.read()
             return [self._loadProfile(serialized, profile_id) for serialized, profile_id in self._upgradeProfile(serialized, file_name)]
 
@@ -52,10 +53,10 @@ class CuraProfileReader(ProfileReader):
         parser = configparser.ConfigParser(interpolation=None)
         parser.read_string(serialized)
 
-        if not "general" in parser:
+        if "general" not in parser:
             Logger.log("w", "Missing required section 'general'.")
             return []
-        if not "version" in parser["general"]:
+        if "version" not in parser["general"]:
             Logger.log("w", "Missing required 'version' property")
             return []
 
@@ -77,7 +78,10 @@ class CuraProfileReader(ProfileReader):
         profile.addMetaDataEntry("type", "quality_changes")
         try:
             profile.deserialize(serialized)
-        except Exception as e:  # Parsing error. This is not a (valid) Cura profile then.
+        except ContainerFormatError as e:
+            Logger.log("e", "Error in the format of a container: %s", str(e))
+            return None
+        except Exception as e:
             Logger.log("e", "Error while trying to parse profile: %s", str(e))
             return None
         return profile
@@ -99,4 +103,6 @@ class CuraProfileReader(ProfileReader):
             return []
 
         filenames, outputs = profile_convert_funcs[0](serialized, profile_id)
+        if filenames is None and outputs is None:
+            return []
         return list(zip(outputs, filenames))

@@ -1,7 +1,7 @@
-// Copyright (c) 2016 Ultimaker B.V.
-// Cura is released under the terms of the AGPLv3 or higher.
+// Copyright (c) 2018 Ultimaker B.V.
+// Cura is released under the terms of the LGPLv3 or higher.
 
-import QtQuick 2.2
+import QtQuick 2.7
 import QtQuick.Controls 1.1
 import QtQuick.Controls.Styles 1.1
 import QtQuick.Layouts 1.1
@@ -9,10 +9,14 @@ import QtQuick.Layouts 1.1
 import UM 1.2 as UM
 import Cura 1.0 as Cura
 
+import "PrinterOutput"
+
 Column
 {
     id: printMonitor
-    property var connectedPrinter: printerConnected ? Cura.MachineManager.printerOutputDevices[0] : null
+    property var connectedDevice: Cura.MachineManager.printerOutputDevices.length >= 1 ? Cura.MachineManager.printerOutputDevices[0] : null
+    property var activePrinter: connectedDevice != null ? connectedDevice.activePrinter : null
+    property var activePrintJob: activePrinter != null ? activePrinter.activePrintJob: null
 
     Cura.ExtrudersModel
     {
@@ -20,123 +24,124 @@ Column
         simpleNames: true
     }
 
-    Item
+    OutputDeviceHeader
     {
-        width: base.width - 2 * UM.Theme.getSize("default_margin").width
-        height: childrenRect.height + UM.Theme.getSize("default_margin").height
-        anchors.left: parent.left
-        anchors.leftMargin: UM.Theme.getSize("default_margin").width
+        width: parent.width
+        outputDevice: connectedDevice
+    }
 
-        Label
+    Rectangle
+    {
+        color: UM.Theme.getColor("sidebar_lining")
+        width: parent.width
+        height: childrenRect.height
+
+        Flow
         {
-            text: printerConnected ? connectedPrinter.connectionText : catalog.i18nc("@info:status", "The printer is not connected.")
-            color: printerConnected && printerAcceptsCommands ? UM.Theme.getColor("setting_control_text") : UM.Theme.getColor("setting_control_disabled_text")
-            font: UM.Theme.getFont("default")
-            wrapMode: Text.WordWrap
+            id: extrudersGrid
+            spacing: UM.Theme.getSize("sidebar_lining_thin").width
             width: parent.width
-        }
-    }
 
-    Loader
-    {
-        sourceComponent: monitorSection
-        property string label: catalog.i18nc("@label", "Temperatures")
-    }
-    Repeater
-    {
-        model: machineExtruderCount.properties.value
-        delegate: Loader
-        {
-            sourceComponent: monitorItem
-            property string label: machineExtruderCount.properties.value > 1 ? extrudersModel.getItem(index).name : catalog.i18nc("@label", "Hotend")
-            property string value: printerConnected ? Math.round(connectedPrinter.hotendTemperatures[index]) + "°C" : ""
-        }
-    }
-    Repeater
-    {
-        model: machineHeatedBed.properties.value == "True" ? 1 : 0
-        delegate: Loader
-        {
-            sourceComponent: monitorItem
-            property string label: catalog.i18nc("@label", "Build plate")
-            property string value: printerConnected ? Math.round(connectedPrinter.bedTemperature) + "°C" : ""
-        }
-    }
-
-    Loader
-    {
-        sourceComponent: monitorSection
-        property string label: catalog.i18nc("@label", "Active print")
-    }
-    Loader
-    {
-        sourceComponent: monitorItem
-        property string label: catalog.i18nc("@label", "Job Name")
-        property string value: printerConnected ? connectedPrinter.jobName : ""
-    }
-    Loader
-    {
-        sourceComponent: monitorItem
-        property string label: catalog.i18nc("@label", "Printing Time")
-        property string value: printerConnected ? getPrettyTime(connectedPrinter.timeTotal) : ""
-    }
-    Loader
-    {
-        sourceComponent: monitorItem
-        property string label: catalog.i18nc("@label", "Estimated time left")
-        property string value: printerConnected ? getPrettyTime(connectedPrinter.timeTotal - connectedPrinter.timeElapsed) : ""
-    }
-
-    Component
-    {
-        id: monitorItem
-
-        Row
-        {
-            height: UM.Theme.getSize("setting_control").height
-            width: base.width - 2 * UM.Theme.getSize("default_margin").width
-            anchors.left: parent.left
-            anchors.leftMargin: UM.Theme.getSize("default_margin").width
-
-            Label
+            Repeater
             {
-                width: parent.width * 0.4
-                anchors.verticalCenter: parent.verticalCenter
-                text: label
-                color: printerConnected && printerAcceptsCommands ? UM.Theme.getColor("setting_control_text") : UM.Theme.getColor("setting_control_disabled_text")
-                font: UM.Theme.getFont("default")
-                elide: Text.ElideRight
-            }
-            Label
-            {
-                width: parent.width * 0.6
-                anchors.verticalCenter: parent.verticalCenter
-                text: value
-                color: printerConnected && printerAcceptsCommands ? UM.Theme.getColor("setting_control_text") : UM.Theme.getColor("setting_control_disabled_text")
-                font: UM.Theme.getFont("default")
-                elide: Text.ElideRight
+                id: extrudersRepeater
+                model: activePrinter!=null ? activePrinter.extruders : null
+
+                ExtruderBox
+                {
+                    color: UM.Theme.getColor("sidebar")
+                    width: index == machineExtruderCount.properties.value - 1 && index % 2 == 0 ? extrudersGrid.width : Math.round(extrudersGrid.width / 2 - UM.Theme.getSize("sidebar_lining_thin").width / 2)
+                    extruderModel: modelData
+                }
             }
         }
     }
-    Component
+
+    Rectangle
     {
-        id: monitorSection
+        color: UM.Theme.getColor("sidebar_lining")
+        width: parent.width
+        height: UM.Theme.getSize("sidebar_lining_thin").width
+    }
 
-        Rectangle
-        {
-            color: UM.Theme.getColor("setting_category")
-            width: base.width - 2 * UM.Theme.getSize("default_margin").width
-            height: UM.Theme.getSize("section").height
-
-            Label
+    HeatedBedBox
+    {
+        visible: {
+            if(activePrinter != null && activePrinter.bed_temperature != -1)
             {
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.left: parent.left
-                anchors.leftMargin: UM.Theme.getSize("default_margin").width
-                text: label
-                font: UM.Theme.getFont("setting_category")
-                color: UM.Theme.getColor("setting_category_text")
+                return true
             }
+            return false
         }
+        printerModel: activePrinter
+    }
+
+    UM.SettingPropertyProvider
+    {
+        id: bedTemperature
+        containerStackId: Cura.MachineManager.activeMachineId
+        key: "material_bed_temperature"
+        watchedProperties: ["value", "minimum_value", "maximum_value", "resolve"]
+        storeIndex: 0
+
+        property var resolve: Cura.MachineManager.activeStackId != Cura.MachineManager.activeMachineId ? properties.resolve : "None"
+    }
+
+    UM.SettingPropertyProvider
+    {
+        id: machineExtruderCount
+        containerStackId: Cura.MachineManager.activeMachineId
+        key: "machine_extruder_count"
+        watchedProperties: ["value"]
+    }
+
+    ManualPrinterControl
+    {
+        printerModel: activePrinter
+        visible: activePrinter != null ? activePrinter.canControlManually : false
+    }
+
+
+    MonitorSection
+    {
+        label: catalog.i18nc("@label", "Active print")
+        width: base.width
+        visible: activePrinter != null
+    }
+
+
+    MonitorItem
+    {
+        label: catalog.i18nc("@label", "Job Name")
+        value: activePrintJob != null ? activePrintJob.name : ""
+        width: base.width
+        visible: activePrinter != null
+    }
+
+    MonitorItem
+    {
+        label: catalog.i18nc("@label", "Printing Time")
+        value: activePrintJob != null ? getPrettyTime(activePrintJob.timeTotal) : ""
+        width: base.width
+        visible: activePrinter != null
+    }
+
+    MonitorItem
+    {
+        label: catalog.i18nc("@label", "Estimated time left")
+        value: activePrintJob != null ? getPrettyTime(activePrintJob.timeTotal - activePrintJob.timeElapsed) : ""
+        visible:
+        {
+            if(activePrintJob == null)
+            {
+                return false
+            }
+
+            return (activePrintJob.state == "printing" ||
+                    activePrintJob.state == "resuming" ||
+                    activePrintJob.state == "pausing" ||
+                    activePrintJob.state == "paused")
+        }
+        width: base.width
     }
 }

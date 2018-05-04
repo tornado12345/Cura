@@ -1,145 +1,247 @@
-# Copyright (c) 2015 Ultimaker B.V.
-# Cura is released under the terms of the AGPLv3 or higher.
+# Copyright (c) 2018 Ultimaker B.V.
+# Cura is released under the terms of the LGPLv3 or higher.
 
-from cura.CuraApplication import CuraApplication
+import json
+import os
+import platform
+import time
+
+from PyQt5.QtCore import pyqtSlot, QObject
 
 from UM.Extension import Extension
 from UM.Application import Application
 from UM.Preferences import Preferences
 from UM.Scene.Iterator.DepthFirstIterator import DepthFirstIterator
-from UM.Scene.SceneNode import SceneNode
 from UM.Message import Message
 from UM.i18n import i18nCatalog
 from UM.Logger import Logger
-from UM.Platform import Platform
+from UM.PluginRegistry import PluginRegistry
 from UM.Qt.Duration import DurationFormat
-from UM.Job import Job
 
-import platform
-import math
-import urllib.request
-import urllib.parse
-import ssl
-import hashlib
-import json
+from .SliceInfoJob import SliceInfoJob
+
 
 catalog = i18nCatalog("cura")
 
-class SliceInfoJob(Job):
-    data = None
-    url = None
-
-    def __init__(self, url, data):
-        super().__init__()
-        self.url = url
-        self.data = data
-
-    def run(self):
-        if not self.url or not self.data:
-            Logger.log("e", "URL or DATA for sending slice info was not set!")
-            return
-
-        # Submit data
-        kwoptions = {"data" : self.data,
-                     "timeout" : 5
-                     }
-
-        if Platform.isOSX():
-            kwoptions["context"] = ssl._create_unverified_context()
-
-        Logger.log("d", "Sending anonymous slice info to [%s]...", self.url)
-
-        try:
-            f = urllib.request.urlopen(self.url, **kwoptions)
-            Logger.log("i", "Sent anonymous slice info.")
-            f.close()
-        except urllib.error.HTTPError as http_exception:
-            Logger.log("e", "An HTTP error occurred while trying to send slice information: %s" % http_exception)
-        except Exception as e: # We don't want any exception to cause problems
-            Logger.log("e", "An exception occurred while trying to send slice information: %s" % e)
 
 ##      This Extension runs in the background and sends several bits of information to the Ultimaker servers.
 #       The data is only sent when the user in question gave permission to do so. All data is anonymous and
 #       no model files are being sent (Just a SHA256 hash of the model).
-class SliceInfo(Extension):
-    info_url = "https://stats.youmagine.com/curastats/slice"
+class SliceInfo(QObject, Extension):
+    info_url = "https://stats.ultimaker.com/api/cura"
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, parent = None):
+        QObject.__init__(self, parent)
+        Extension.__init__(self)
         Application.getInstance().getOutputDeviceManager().writeStarted.connect(self._onWriteStarted)
         Preferences.getInstance().addPreference("info/send_slice_info", True)
         Preferences.getInstance().addPreference("info/asked_send_slice_info", False)
 
+        self._more_info_dialog = None
+        self._example_data_content = None
+
         if not Preferences.getInstance().getValue("info/asked_send_slice_info"):
-            self.send_slice_info_message = Message(catalog.i18nc("@info", "Cura collects anonymised slicing statistics. You can disable this in preferences"), lifetime = 0, dismissable = False)
-            self.send_slice_info_message.addAction("Dismiss", catalog.i18nc("@action:button", "Dismiss"), None, "")
+            self.send_slice_info_message = Message(catalog.i18nc("@info", "Cura collects anonymized usage statistics."),
+                                                   lifetime = 0,
+                                                   dismissable = False,
+                                                   title = catalog.i18nc("@info:title", "Collecting Data"))
+
+            self.send_slice_info_message.addAction("Dismiss", name = catalog.i18nc("@action:button", "Allow"), icon = None,
+                    description = catalog.i18nc("@action:tooltip", "Allow Cura to send anonymized usage statistics to help prioritize future improvements to Cura. Some of your preferences and settings are sent, the Cura version and a hash of the models you're slicing."))
+            self.send_slice_info_message.addAction("MoreInfo", name = catalog.i18nc("@action:button", "More info"), icon = None,
+                    description = catalog.i18nc("@action:tooltip", "See more information on what data Cura sends."), button_style = Message.ActionButtonStyle.LINK)
             self.send_slice_info_message.actionTriggered.connect(self.messageActionTriggered)
             self.send_slice_info_message.show()
 
+        Application.getInstance().initializationFinished.connect(self._onAppInitialized)
+
+    def _onAppInitialized(self):
+        if self._more_info_dialog is None:
+            self._more_info_dialog = self._createDialog("MoreInfoWindow.qml")
+
+    ##  Perform action based on user input.
+    #   Note that clicking "Disable" won't actually disable the data sending, but rather take the user to preferences where they can disable it.
     def messageActionTriggered(self, message_id, action_id):
-        self.send_slice_info_message.hide()
         Preferences.getInstance().setValue("info/asked_send_slice_info", True)
+        if action_id == "MoreInfo":
+            self.showMoreInfoDialog()
+        self.send_slice_info_message.hide()
+
+    def showMoreInfoDialog(self):
+        if self._more_info_dialog is None:
+            self._more_info_dialog = self._createDialog("MoreInfoWindow.qml")
+        self._more_info_dialog.open()
+
+    def _createDialog(self, qml_name):
+        Logger.log("d", "Creating dialog [%s]", qml_name)
+        file_path = os.path.join(PluginRegistry.getInstance().getPluginPath(self.getPluginId()), qml_name)
+        dialog = Application.getInstance().createQmlComponent(file_path, {"manager": self})
+        return dialog
+
+    @pyqtSlot(result = str)
+    def getExampleData(self) -> str:
+        if self._example_data_content is None:
+            file_path = os.path.join(PluginRegistry.getInstance().getPluginPath(self.getPluginId()), "example_data.json")
+            with open(file_path, "r", encoding = "utf-8") as f:
+                self._example_data_content = f.read()
+        return self._example_data_content
+
+    @pyqtSlot(bool)
+    def setSendSliceInfo(self, enabled: bool):
+        Preferences.getInstance().setValue("info/send_slice_info", enabled)
 
     def _onWriteStarted(self, output_device):
         try:
             if not Preferences.getInstance().getValue("info/send_slice_info"):
                 Logger.log("d", "'info/send_slice_info' is turned off.")
-                return # Do nothing, user does not want to send data
+                return  # Do nothing, user does not want to send data
 
-            # Listing all files placed on the buildplate
-            modelhashes = []
-            for node in DepthFirstIterator(CuraApplication.getInstance().getController().getScene().getRoot()):
-                if type(node) is not SceneNode or not node.getMeshData():
-                    continue
-                modelhashes.append(node.getMeshData().getHash())
+            application = Application.getInstance()
+            machine_manager = application.getMachineManager()
+            print_information = application.getPrintInformation()
 
-            # Creating md5sums and formatting them as discussed on JIRA
-            modelhash_formatted = ",".join(modelhashes)
+            global_stack = machine_manager.activeMachine
 
-            global_container_stack = Application.getInstance().getGlobalContainerStack()
+            data = dict()  # The data that we're going to submit.
+            data["time_stamp"] = time.time()
+            data["schema_version"] = 0
+            data["cura_version"] = application.getVersion()
 
-            # Get total material used (in mm^3)
-            print_information = Application.getInstance().getPrintInformation()
-            material_radius = 0.5 * global_container_stack.getProperty("material_diameter", "value")
+            active_mode = Preferences.getInstance().getValue("cura/active_mode")
+            if active_mode == 0:
+                data["active_mode"] = "recommended"
+            else:
+                data["active_mode"] = "custom"
 
-            # Send material per extruder
-            material_used = [str(math.pi * material_radius * material_radius * material_length) for material_length in print_information.materialLengths]
-            material_used = ",".join(material_used)
+            definition_changes = global_stack.definitionChanges
+            machine_settings_changed_by_user = False
+            if definition_changes.getId() != "empty":
+                # Now a definition_changes container will always be created for a stack,
+                # so we also need to check if there is any instance in the definition_changes container
+                if definition_changes.getAllKeys():
+                    machine_settings_changed_by_user = True
 
-            containers = { "": global_container_stack.serialize() }
-            for container in global_container_stack.getContainers():
-                container_id = container.getId()
-                try:
-                    container_serialized = container.serialize()
-                except NotImplementedError:
-                    Logger.log("w", "Container %s could not be serialized!", container_id)
-                    continue
-                if container_serialized:
-                    containers[container_id] = container_serialized
-                else:
-                    Logger.log("i", "No data found in %s to be serialized!", container_id)
+            data["machine_settings_changed_by_user"] = machine_settings_changed_by_user
+            data["language"] = Preferences.getInstance().getValue("general/language")
+            data["os"] = {"type": platform.system(), "version": platform.version()}
 
-            # Bundle the collected data
-            submitted_data = {
-                "processor": platform.processor(),
-                "machine": platform.machine(),
-                "platform": platform.platform(),
-                "settings": json.dumps(containers), # bundle of containers with their serialized contents
-                "version": Application.getInstance().getVersion(),
-                "modelhash": modelhash_formatted,
-                "printtime": print_information.currentPrintTime.getDisplayString(DurationFormat.Format.ISO8601),
-                "filament": material_used,
-                "language": Preferences.getInstance().getValue("general/language"),
-            }
+            data["active_machine"] = {"definition_id": global_stack.definition.getId(),
+                                      "manufacturer": global_stack.definition.getMetaDataEntry("manufacturer", "")}
+
+            # add extruder specific data to slice info
+            data["extruders"] = []
+            extruders = list(global_stack.extruders.values())
+            extruders = sorted(extruders, key = lambda extruder: extruder.getMetaDataEntry("position"))
+
+            for extruder in extruders:
+                extruder_dict = dict()
+                extruder_dict["active"] = machine_manager.activeStack == extruder
+                extruder_dict["material"] = {"GUID": extruder.material.getMetaData().get("GUID", ""),
+                                             "type": extruder.material.getMetaData().get("material", ""),
+                                             "brand": extruder.material.getMetaData().get("brand", "")
+                                             }
+                extruder_position = int(extruder.getMetaDataEntry("position", "0"))
+                if len(print_information.materialLengths) > extruder_position:
+                    extruder_dict["material_used"] = print_information.materialLengths[extruder_position]
+                extruder_dict["variant"] = extruder.variant.getName()
+                extruder_dict["nozzle_size"] = extruder.getProperty("machine_nozzle_size", "value")
+
+                extruder_settings = dict()
+                extruder_settings["wall_line_count"] = extruder.getProperty("wall_line_count", "value")
+                extruder_settings["retraction_enable"] = extruder.getProperty("retraction_enable", "value")
+                extruder_settings["infill_sparse_density"] = extruder.getProperty("infill_sparse_density", "value")
+                extruder_settings["infill_pattern"] = extruder.getProperty("infill_pattern", "value")
+                extruder_settings["gradual_infill_steps"] = extruder.getProperty("gradual_infill_steps", "value")
+                extruder_settings["default_material_print_temperature"] = extruder.getProperty("default_material_print_temperature", "value")
+                extruder_settings["material_print_temperature"] = extruder.getProperty("material_print_temperature", "value")
+                extruder_dict["extruder_settings"] = extruder_settings
+                data["extruders"].append(extruder_dict)
+
+            data["quality_profile"] = global_stack.quality.getMetaData().get("quality_type")
+
+            data["models"] = []
+            # Listing all files placed on the build plate
+            for node in DepthFirstIterator(application.getController().getScene().getRoot()):
+                if node.callDecoration("isSliceable"):
+                    model = dict()
+                    model["hash"] = node.getMeshData().getHash()
+                    bounding_box = node.getBoundingBox()
+                    model["bounding_box"] = {"minimum": {"x": bounding_box.minimum.x,
+                                                         "y": bounding_box.minimum.y,
+                                                         "z": bounding_box.minimum.z},
+                                             "maximum": {"x": bounding_box.maximum.x,
+                                                         "y": bounding_box.maximum.y,
+                                                         "z": bounding_box.maximum.z}}
+                    model["transformation"] = {"data": str(node.getWorldTransformation().getData()).replace("\n", "")}
+                    extruder_position = node.callDecoration("getActiveExtruderPosition")
+                    model["extruder"] = 0 if extruder_position is None else int(extruder_position)
+
+                    model_settings = dict()
+                    model_stack = node.callDecoration("getStack")
+                    if model_stack:
+                        model_settings["support_enabled"] = model_stack.getProperty("support_enable", "value")
+                        model_settings["support_extruder_nr"] = int(model_stack.getExtruderPositionValueWithDefault("support_extruder_nr"))
+
+                        # Mesh modifiers;
+                        model_settings["infill_mesh"] = model_stack.getProperty("infill_mesh", "value")
+                        model_settings["cutting_mesh"] = model_stack.getProperty("cutting_mesh", "value")
+                        model_settings["support_mesh"] = model_stack.getProperty("support_mesh", "value")
+                        model_settings["anti_overhang_mesh"] = model_stack.getProperty("anti_overhang_mesh", "value")
+
+                        model_settings["wall_line_count"] = model_stack.getProperty("wall_line_count", "value")
+                        model_settings["retraction_enable"] = model_stack.getProperty("retraction_enable", "value")
+
+                        # Infill settings
+                        model_settings["infill_sparse_density"] = model_stack.getProperty("infill_sparse_density", "value")
+                        model_settings["infill_pattern"] = model_stack.getProperty("infill_pattern", "value")
+                        model_settings["gradual_infill_steps"] = model_stack.getProperty("gradual_infill_steps", "value")
+
+                    model["model_settings"] = model_settings
+
+                    data["models"].append(model)
+
+            print_times = print_information.printTimes()
+            data["print_times"] = {"travel": int(print_times["travel"].getDisplayString(DurationFormat.Format.Seconds)),
+                                   "support": int(print_times["support"].getDisplayString(DurationFormat.Format.Seconds)),
+                                   "infill": int(print_times["infill"].getDisplayString(DurationFormat.Format.Seconds)),
+                                   "total": int(print_information.currentPrintTime.getDisplayString(DurationFormat.Format.Seconds))}
+
+            print_settings = dict()
+            print_settings["layer_height"] = global_stack.getProperty("layer_height", "value")
+
+            # Support settings
+            print_settings["support_enabled"] = global_stack.getProperty("support_enable", "value")
+            print_settings["support_extruder_nr"] = int(global_stack.getExtruderPositionValueWithDefault("support_extruder_nr"))
+
+            # Platform adhesion settings
+            print_settings["adhesion_type"] = global_stack.getProperty("adhesion_type", "value")
+
+            # Shell settings
+            print_settings["wall_line_count"] = global_stack.getProperty("wall_line_count", "value")
+            print_settings["retraction_enable"] = global_stack.getProperty("retraction_enable", "value")
+
+            # Prime tower settings
+            print_settings["prime_tower_enable"] = global_stack.getProperty("prime_tower_enable", "value")
+
+            # Infill settings
+            print_settings["infill_sparse_density"] = global_stack.getProperty("infill_sparse_density", "value")
+            print_settings["infill_pattern"] = global_stack.getProperty("infill_pattern", "value")
+            print_settings["gradual_infill_steps"] = global_stack.getProperty("gradual_infill_steps", "value")
+
+            print_settings["print_sequence"] = global_stack.getProperty("print_sequence", "value")
+
+            data["print_settings"] = print_settings
+
+            # Send the name of the output device type that is used.
+            data["output_to"] = type(output_device).__name__
 
             # Convert data to bytes
-            submitted_data = urllib.parse.urlencode(submitted_data)
-            binary_data = submitted_data.encode("utf-8")
+            binary_data = json.dumps(data).encode("utf-8")
 
             # Sending slice info non-blocking
             reportJob = SliceInfoJob(self.info_url, binary_data)
             reportJob.start()
-        except Exception as e:
+        except Exception:
             # We really can't afford to have a mistake here, as this would break the sending of g-code to a device
             # (Either saving or directly to a printer). The functionality of the slice data is not *that* important.
-            Logger.log("e", "Exception raised while sending slice info: %s" %(repr(e))) # But we should be notified about these problems of course.
+            Logger.logException("e", "Exception raised while sending slice info.") # But we should be notified about these problems of course.

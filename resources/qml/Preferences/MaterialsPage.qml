@@ -1,368 +1,568 @@
-// Copyright (c) 2016 Ultimaker B.V.
-// Cura is released under the terms of the AGPLv3 or higher.
+// Copyright (c) 2018 Ultimaker B.V.
+// Uranium is released under the terms of the LGPLv3 or higher.
 
-import QtQuick 2.1
-import QtQuick.Controls 1.1
+import QtQuick 2.7
+import QtQuick.Controls 1.4
+import QtQuick.Layouts 1.3
 import QtQuick.Dialogs 1.2
 
 import UM 1.2 as UM
 import Cura 1.0 as Cura
 
-UM.ManagementPage
+
+Item
 {
-    id: base;
+    id: base
 
-    title: catalog.i18nc("@title:tab", "Materials");
+    property QtObject materialManager: CuraApplication.getMaterialManager()
+    property var resetEnabled: false  // Keep PreferencesDialog happy
 
-    model: UM.InstanceContainersModel
+    UM.I18nCatalog { id: catalog; name: "cura"; }
+
+    Cura.MaterialManagementModel
     {
-        filter:
-        {
-            var result = { "type": "material" }
-            if(Cura.MachineManager.filterMaterialsByMachine)
-            {
-                result.definition = Cura.MachineManager.activeQualityDefinitionId;
-                if(Cura.MachineManager.hasVariants)
-                {
-                    result.variant = Cura.MachineManager.activeQualityVariantId;
-                }
-            }
-            else
-            {
-                result.definition = "fdmprinter";
-                result.compatible = true; //NB: Only checks for compatibility in global version of material, but we don't have machine-specific materials anyway.
-            }
-            return result
-        }
-
-        sectionProperty: "brand"
+        id: materialsModel
     }
 
-    delegate: Rectangle
+    Label
     {
-        width: objectList.width;
-        height: childrenRect.height;
-        color: isCurrentItem ? palette.highlight : index % 2 ? palette.base : palette.alternateBase
-        property bool isCurrentItem: ListView.isCurrentItem
+        id: titleLabel
 
-        Row
+        anchors
         {
-            spacing: UM.Theme.getSize("default_margin").width / 2;
-            anchors.left: parent.left;
-            anchors.leftMargin: UM.Theme.getSize("default_margin").width;
-            anchors.right: parent.right;
-            Rectangle
-            {
-                width: parent.height * 0.8
-                height: parent.height * 0.8
-                color: model.metadata.color_code
-                border.color: isCurrentItem ? palette.highlightedText : palette.text;
-                anchors.verticalCenter: parent.verticalCenter
-            }
-            Label
-            {
-                width: parent.width * 0.3
-                text: model.metadata.material
-                elide: Text.ElideRight
-                font.italic: model.id == activeId
-                color: isCurrentItem ? palette.highlightedText : palette.text;
-            }
-            Label
-            {
-                text: (model.name != model.metadata.material) ? model.name : ""
-                elide: Text.ElideRight
-                font.italic: model.id == activeId
-                color: isCurrentItem ? palette.highlightedText : palette.text;
-            }
+            top: parent.top
+            left: parent.left
+            right: parent.right
+            margins: 5 * screenScaleFactor
         }
 
-        MouseArea
-        {
-            anchors.fill: parent;
-            onClicked:
-            {
-                if(!parent.ListView.isCurrentItem)
-                {
-                    parent.ListView.view.currentIndex = index;
-                    base.itemActivated();
-                }
-            }
-        }
+        font.pointSize: 18
+        text: catalog.i18nc("@title:tab", "Materials")
     }
 
-    activeId: Cura.MachineManager.activeMaterialId
-    activeIndex: {
-        for(var i = 0; i < model.rowCount(); i++) {
-            if (model.getItem(i).id == Cura.MachineManager.activeMaterialId) {
-                return i;
-            }
-        }
-        return -1;
+    property var hasCurrentItem: materialListView.currentItem != null
+
+    property var currentItem:
+    {  // is soon to be overwritten
+        var current_index = materialListView.currentIndex;
+        return materialsModel.getItem(current_index);
     }
 
-    scrollviewCaption:
+    property var isCurrentItemActivated:
     {
-        if (Cura.MachineManager.hasVariants)
-        {
-            catalog.i18nc("@action:label %1 is printer name, %2 is how this printer names variants, %3 is variant name", "Printer: %1, %2: %3").arg(Cura.MachineManager.activeMachineName).arg(Cura.MachineManager.activeDefinitionVariantsName).arg(Cura.MachineManager.activeVariantName)
-        }
-        else
-        {
-            catalog.i18nc("@action:label %1 is printer name","Printer: %1").arg(Cura.MachineManager.activeMachineName)
-        }
+        const extruder_position = Cura.ExtruderManager.activeExtruderIndex;
+        const root_material_id = Cura.MachineManager.currentRootMaterialId[extruder_position];
+        return base.currentItem.root_material_id == root_material_id;
     }
-    detailsVisible: true
 
-    section.property: "section"
-    section.delegate: Label
+    Component.onCompleted:
     {
-        text: section
-        font.bold: true
-        anchors.left: parent.left;
-        anchors.leftMargin: UM.Theme.getSize("default_lining").width;
+        // Select the activated material when this page shows up
+        const extruder_position = Cura.ExtruderManager.activeExtruderIndex;
+        const active_root_material_id = Cura.MachineManager.currentRootMaterialId[extruder_position];
+        var itemIndex = -1;
+        for (var i = 0; i < materialsModel.rowCount(); ++i)
+        {
+            var item = materialsModel.getItem(i);
+            if (item.root_material_id == active_root_material_id)
+            {
+                itemIndex = i;
+                break;
+            }
+        }
+        materialListView.currentIndex = itemIndex;
     }
 
-    buttons: [
+    Row  // Button Row
+    {
+        id: buttonRow
+        anchors
+        {
+            left: parent.left
+            right: parent.right
+            top: titleLabel.bottom
+        }
+        height: childrenRect.height
+
+        // Activate button
         Button
         {
-            text: catalog.i18nc("@action:button", "Activate");
-            iconName: "list-activate";
-            enabled: base.currentItem != null && base.currentItem.id != Cura.MachineManager.activeMaterialId
-            onClicked: Cura.MachineManager.setActiveMaterial(base.currentItem.id)
-        },
+            text: catalog.i18nc("@action:button", "Activate")
+            iconName: "list-activate"
+            enabled: !isCurrentItemActivated
+            onClicked:
+            {
+                forceActiveFocus()
+
+                const extruder_position = Cura.ExtruderManager.activeExtruderIndex;
+                Cura.MachineManager.setMaterial(extruder_position, base.currentItem.container_node);
+            }
+        }
+
+        // Create button
+        Button
+        {
+            text: catalog.i18nc("@action:button", "Create")
+            iconName: "list-add"
+            onClicked:
+            {
+                forceActiveFocus();
+                base.newRootMaterialIdToSwitchTo = base.materialManager.createMaterial();
+                base.toActivateNewMaterial = true;
+            }
+        }
+
+        // Duplicate button
         Button
         {
             text: catalog.i18nc("@action:button", "Duplicate");
-            iconName: "list-add";
-            enabled: base.currentItem != null
+            iconName: "list-add"
+            enabled: base.hasCurrentItem
             onClicked:
             {
-                var base_file = Cura.ContainerManager.getContainerMetaDataEntry(base.currentItem.id, "base_file")
-                // We need to copy the base container instead of the specific variant.
-                var material_id = base_file == "" ? Cura.ContainerManager.duplicateMaterial(base.currentItem.id): Cura.ContainerManager.duplicateMaterial(base_file)
-                if(material_id == "")
-                {
-                    return
-                }
-
-                Cura.MachineManager.setActiveMaterial(material_id)
+                forceActiveFocus();
+                base.newRootMaterialIdToSwitchTo = base.materialManager.duplicateMaterial(base.currentItem.container_node);
+                base.toActivateNewMaterial = true;
             }
-        },
+        }
+
+        // Remove button
         Button
         {
-            text: catalog.i18nc("@action:button", "Remove");
-            iconName: "list-remove";
-            enabled: base.currentItem != null && !base.currentItem.readOnly && !Cura.ContainerManager.isContainerUsed(base.currentItem.id)
-            onClicked: confirmDialog.open()
-        },
+            text: catalog.i18nc("@action:button", "Remove")
+            iconName: "list-remove"
+            enabled: base.hasCurrentItem && !base.currentItem.is_read_only && !base.isCurrentItemActivated
+            onClicked:
+            {
+                forceActiveFocus();
+                confirmRemoveMaterialDialog.open();
+            }
+        }
+
+        // Import button
         Button
         {
-            text: catalog.i18nc("@action:button", "Import");
-            iconName: "document-import";
-            onClicked: importDialog.open();
-            visible: true;
-        },
+            text: catalog.i18nc("@action:button", "Import")
+            iconName: "document-import"
+            onClicked:
+            {
+                forceActiveFocus();
+                importMaterialDialog.open();
+            }
+            visible: true
+        }
+
+        // Export button
         Button
         {
             text: catalog.i18nc("@action:button", "Export")
             iconName: "document-export"
-            onClicked: exportDialog.open()
+            onClicked:
+            {
+                forceActiveFocus();
+                exportMaterialDialog.open();
+            }
             enabled: currentItem != null
         }
-    ]
-
-    Item {
-        visible: base.currentItem != null
-        anchors.fill: parent
-
-        Item
-        {
-            id: profileName
-
-            width: parent.width;
-            height: childrenRect.height
-
-            Label { text: materialProperties.name; font: UM.Theme.getFont("large"); }
-            Button
-            {
-                id: editButton
-                anchors.right: parent.right;
-                text: catalog.i18nc("@action:button", "Edit");
-                iconName: "document-edit";
-
-                enabled: base.currentItem != null && !base.currentItem.readOnly
-
-                checkable: enabled
-            }
-        }
-
-        MaterialView
-        {
-            anchors
-            {
-                left: parent.left
-                right: parent.right
-                top: profileName.bottom
-                topMargin: UM.Theme.getSize("default_margin").height
-                bottom: parent.bottom
-            }
-
-            editingEnabled: editButton.checkable && editButton.checked;
-
-            properties: materialProperties
-            containerId: base.currentItem != null ? base.currentItem.id : ""
-        }
-
-        QtObject
-        {
-            id: materialProperties
-
-            property string name: "Unknown";
-            property string profile_type: "Unknown";
-            property string supplier: "Unknown";
-            property string material_type: "Unknown";
-
-            property string color_name: "Yellow";
-            property color color_code: "yellow";
-
-            property real density: 0.0;
-            property real diameter: 0.0;
-
-            property real spool_cost: 0.0;
-            property real spool_weight: 0.0;
-            property real spool_length: 0.0;
-            property real cost_per_meter: 0.0;
-
-            property string description: "";
-            property string adhesion_info: "";
-        }
-
-        UM.ConfirmRemoveDialog
-        {
-            id: confirmDialog
-            object: base.currentItem != null ? base.currentItem.name : ""
-            onYes:
-            {
-                // A material container can actually be multiple items, so we need to find (and remove) all of them.
-                var base_file = Cura.ContainerManager.getContainerMetaDataEntry(base.currentItem.id, "base_file")
-                if(base_file == "")
-                {
-                    base_file = base.currentItem.id
-                }
-                var guid = Cura.ContainerManager.getContainerMetaDataEntry(base.currentItem.id, "GUID")
-                var containers = Cura.ContainerManager.findInstanceContainers({"GUID": guid, "base_file": base_file, "type": "material"})
-                for(var i in containers)
-                {
-                    Cura.ContainerManager.removeContainer(containers[i])
-                }
-                currentItem = base.model.getItem(base.objectList.currentIndex) // Refresh the current item.
-            }
-        }
-
-        FileDialog
-        {
-            id: importDialog;
-            title: catalog.i18nc("@title:window", "Import Material");
-            selectExisting: true;
-            nameFilters: Cura.ContainerManager.getContainerNameFilters("material")
-            folder: CuraApplication.getDefaultPath("dialog_material_path")
-            onAccepted:
-            {
-                var result = Cura.ContainerManager.importContainer(fileUrl)
-
-                messageDialog.title = catalog.i18nc("@title:window", "Import Material")
-                messageDialog.text = catalog.i18nc("@info:status", "Could not import material <filename>%1</filename>: <message>%2</message>").arg(fileUrl).arg(result.message)
-                if(result.status == "success")
-                {
-                    messageDialog.icon = StandardIcon.Information
-                    messageDialog.text = catalog.i18nc("@info:status", "Successfully imported material <filename>%1</filename>").arg(fileUrl)
-                }
-                else if(result.status == "duplicate")
-                {
-                    messageDialog.icon = StandardIcon.Warning
-                }
-                else
-                {
-                    messageDialog.icon = StandardIcon.Critical
-                }
-                messageDialog.open()
-                CuraApplication.setDefaultPath("dialog_material_path", folder)
-            }
-        }
-
-        FileDialog
-        {
-            id: exportDialog;
-            title: catalog.i18nc("@title:window", "Export Material");
-            selectExisting: false;
-            nameFilters: Cura.ContainerManager.getContainerNameFilters("material")
-            folder: CuraApplication.getDefaultPath("dialog_material_path")
-            onAccepted:
-            {
-                if(base.currentItem.metadata.base_file)
-                {
-                    var result = Cura.ContainerManager.exportContainer(base.currentItem.metadata.base_file, selectedNameFilter, fileUrl)
-                }
-                else
-                {
-                    var result = Cura.ContainerManager.exportContainer(base.currentItem.id, selectedNameFilter, fileUrl)
-                }
-
-                messageDialog.title = catalog.i18nc("@title:window", "Export Material")
-                if(result.status == "error")
-                {
-                    messageDialog.icon = StandardIcon.Critical
-                    messageDialog.text = catalog.i18nc("@info:status", "Failed to export material to <filename>%1</filename>: <message>%2</message>").arg(fileUrl).arg(result.message)
-                    messageDialog.open()
-                }
-                else if(result.status == "success")
-                {
-                    messageDialog.icon = StandardIcon.Information
-                    messageDialog.text = catalog.i18nc("@info:status", "Successfully exported material to <filename>%1</filename>").arg(result.path)
-                    messageDialog.open()
-                }
-                CuraApplication.setDefaultPath("dialog_material_path", folder)
-            }
-        }
-
-        MessageDialog
-        {
-            id: messageDialog
-        }
-
-        UM.I18nCatalog { id: catalog; name: "cura"; }
-        SystemPalette { id: palette }
     }
 
-    onCurrentItemChanged:
+    property string newRootMaterialIdToSwitchTo: ""
+    property bool toActivateNewMaterial: false
+
+    // This connection makes sure that we will switch to the new
+    Connections
     {
-        if(currentItem == null)
+        target: materialsModel
+        onItemsChanged:
         {
-            return
-        }
-        materialProperties.name = currentItem.name;
+            var currentItemId = base.currentItem == null ? "" : base.currentItem.root_material_id;
+            var position = Cura.ExtruderManager.activeExtruderIndex;
 
-        if(currentItem.metadata != undefined && currentItem.metadata != null)
-        {
-            materialProperties.supplier = currentItem.metadata.brand ? currentItem.metadata.brand : "Unknown";
-            materialProperties.material_type = currentItem.metadata.material ? currentItem.metadata.material : "Unknown";
-            materialProperties.color_name = currentItem.metadata.color_name ? currentItem.metadata.color_name : "Yellow";
-            materialProperties.color_code = currentItem.metadata.color_code ? currentItem.metadata.color_code : "yellow";
-
-            materialProperties.description = currentItem.metadata.description ? currentItem.metadata.description : "";
-            materialProperties.adhesion_info = currentItem.metadata.adhesion_info ? currentItem.metadata.adhesion_info : "";
-
-            if(currentItem.metadata.properties != undefined && currentItem.metadata.properties != null)
+            // try to pick the currently selected item; it may have been moved
+            if (base.newRootMaterialIdToSwitchTo == "")
             {
-                materialProperties.density = currentItem.metadata.properties.density ? currentItem.metadata.properties.density : 0.0;
-                materialProperties.diameter = currentItem.metadata.properties.diameter ? currentItem.metadata.properties.diameter : 0.0;
+                base.newRootMaterialIdToSwitchTo = currentItemId;
+            }
+
+            for (var idx = 0; idx < materialsModel.rowCount(); ++idx)
+            {
+                var item = materialsModel.getItem(idx);
+                if (item.root_material_id == base.newRootMaterialIdToSwitchTo)
+                {
+                    // Switch to the newly created profile if needed
+                    materialListView.currentIndex = idx;
+                    materialListView.activateDetailsWithIndex(materialListView.currentIndex);
+                    if (base.toActivateNewMaterial)
+                    {
+                        Cura.MachineManager.setMaterial(position, item.container_node);
+                    }
+                    base.newRootMaterialIdToSwitchTo = "";
+                    base.toActivateNewMaterial = false;
+                    return
+                }
+            }
+
+            materialListView.currentIndex = 0;
+            materialListView.activateDetailsWithIndex(materialListView.currentIndex);
+            if (base.toActivateNewMaterial)
+            {
+                Cura.MachineManager.setMaterial(position, materialsModel.getItem(0).container_node);
+            }
+            base.newRootMaterialIdToSwitchTo = "";
+            base.toActivateNewMaterial = false;
+        }
+    }
+
+    MessageDialog
+    {
+        id: confirmRemoveMaterialDialog
+
+        icon: StandardIcon.Question;
+        title: catalog.i18nc("@title:window", "Confirm Remove")
+        text: catalog.i18nc("@label (%1 is object name)", "Are you sure you wish to remove %1? This cannot be undone!").arg(base.currentItem.name)
+        standardButtons: StandardButton.Yes | StandardButton.No
+        modality: Qt.ApplicationModal
+
+        onYes:
+        {
+            base.materialManager.removeMaterial(base.currentItem.container_node);
+        }
+    }
+
+    FileDialog
+    {
+        id: importMaterialDialog
+        title: catalog.i18nc("@title:window", "Import Material")
+        selectExisting: true
+        nameFilters: Cura.ContainerManager.getContainerNameFilters("material")
+        folder: CuraApplication.getDefaultPath("dialog_material_path")
+        onAccepted:
+        {
+            var result = Cura.ContainerManager.importMaterialContainer(fileUrl);
+
+            messageDialog.title = catalog.i18nc("@title:window", "Import Material");
+            messageDialog.text = catalog.i18nc("@info:status Don't translate the XML tags <filename> or <message>!", "Could not import material <filename>%1</filename>: <message>%2</message>").arg(fileUrl).arg(result.message);
+            if (result.status == "success")
+            {
+                messageDialog.icon = StandardIcon.Information;
+                messageDialog.text = catalog.i18nc("@info:status Don't translate the XML tag <filename>!", "Successfully imported material <filename>%1</filename>").arg(fileUrl);
+            }
+            else if (result.status == "duplicate")
+            {
+                messageDialog.icon = StandardIcon.Warning;
             }
             else
             {
-                materialProperties.density = 0.0;
-                materialProperties.diameter = 0.0;
+                messageDialog.icon = StandardIcon.Critical;
+            }
+            messageDialog.open();
+            CuraApplication.setDefaultPath("dialog_material_path", folder);
+        }
+    }
+
+    FileDialog
+    {
+        id: exportMaterialDialog
+        title: catalog.i18nc("@title:window", "Export Material")
+        selectExisting: false
+        nameFilters: Cura.ContainerManager.getContainerNameFilters("material")
+        folder: CuraApplication.getDefaultPath("dialog_material_path")
+        onAccepted:
+        {
+            var result = Cura.ContainerManager.exportContainer(base.currentItem.root_material_id, selectedNameFilter, fileUrl);
+
+            messageDialog.title = catalog.i18nc("@title:window", "Export Material");
+            if (result.status == "error")
+            {
+                messageDialog.icon = StandardIcon.Critical;
+                messageDialog.text = catalog.i18nc("@info:status Don't translate the XML tags <filename> and <message>!", "Failed to export material to <filename>%1</filename>: <message>%2</message>").arg(fileUrl).arg(result.message);
+                messageDialog.open();
+            }
+            else if (result.status == "success")
+            {
+                messageDialog.icon = StandardIcon.Information;
+                messageDialog.text = catalog.i18nc("@info:status Don't translate the XML tag <filename>!", "Successfully exported material to <filename>%1</filename>").arg(result.path);
+                messageDialog.open();
+            }
+            CuraApplication.setDefaultPath("dialog_material_path", folder);
+        }
+    }
+
+    MessageDialog
+    {
+        id: messageDialog
+    }
+
+
+    Item {
+        id: contentsItem
+
+        anchors
+        {
+            top: titleLabel.bottom
+            left: parent.left
+            right: parent.right
+            bottom: parent.bottom
+            margins: 5 * screenScaleFactor
+            bottomMargin: 0
+        }
+
+        clip: true
+    }
+
+    Item
+    {
+        anchors
+        {
+            top: buttonRow.bottom
+            topMargin: UM.Theme.getSize("default_margin").height
+            left: parent.left
+            right: parent.right
+            bottom: parent.bottom
+        }
+
+        SystemPalette { id: palette }
+
+        Label
+        {
+            id: captionLabel
+            anchors
+            {
+                top: parent.top
+                left: parent.left
+            }
+            visible: text != ""
+            text:
+            {
+                var caption = catalog.i18nc("@action:label", "Printer") + ": " + Cura.MachineManager.activeMachineName;
+                if (Cura.MachineManager.hasVariants)
+                {
+                    caption += ", " + Cura.MachineManager.activeDefinitionVariantsName + ": " + Cura.MachineManager.activeVariantName;
+                }
+                return caption;
+            }
+            width: materialScrollView.width
+            elide: Text.ElideRight
+        }
+
+        ScrollView
+        {
+            id: materialScrollView
+            anchors
+            {
+                top: captionLabel.visible ? captionLabel.bottom : parent.top
+                topMargin: captionLabel.visible ? UM.Theme.getSize("default_margin").height : 0
+                bottom: parent.bottom
+                left: parent.left
             }
 
+            Rectangle
+            {
+                parent: viewport
+                anchors.fill: parent
+                color: palette.light
+            }
+
+            width: true ? (parent.width * 0.4) | 0 : parent.width
+            frameVisible: true
+
+            ListView
+            {
+                id: materialListView
+
+                model: materialsModel
+
+                section.property: "brand"
+                section.criteria: ViewSection.FullString
+                section.delegate: Rectangle
+                {
+                    width: materialScrollView.width
+                    height: childrenRect.height
+                    color: palette.light
+
+                    Label
+                    {
+                        anchors.left: parent.left
+                        anchors.leftMargin: UM.Theme.getSize("default_lining").width
+                        text: section
+                        font.bold: true
+                        color: palette.text
+                    }
+                }
+
+                delegate: Rectangle
+                {
+                    width: materialScrollView.width
+                    height: childrenRect.height
+                    color: ListView.isCurrentItem ? palette.highlight : (model.index % 2) ? palette.base : palette.alternateBase
+
+                    Row
+                    {
+                        id: materialRow
+                        spacing: (UM.Theme.getSize("default_margin").width / 2) | 0
+                        anchors.left: parent.left
+                        anchors.leftMargin: UM.Theme.getSize("default_margin").width
+                        anchors.right: parent.right
+
+                        property bool isItemActivated:
+                        {
+                            const extruder_position = Cura.ExtruderManager.activeExtruderIndex;
+                            const root_material_id = Cura.MachineManager.currentRootMaterialId[extruder_position];
+                            return model.root_material_id == root_material_id;
+                        }
+
+                        Rectangle
+                        {
+                            width: Math.floor(parent.height * 0.8)
+                            height: Math.floor(parent.height * 0.8)
+                            color: model.color_code
+                            border.color: parent.ListView.isCurrentItem ? palette.highlightedText : palette.text;
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                        Label
+                        {
+                            width: Math.floor((parent.width * 0.3))
+                            text: model.material
+                            elide: Text.ElideRight
+                            font.italic: materialRow.isItemActivated
+                            color: parent.ListView.isCurrentItem ? palette.highlightedText : palette.text;
+                        }
+                        Label
+                        {
+                            text: (model.name != model.material) ? model.name : ""
+                            elide: Text.ElideRight
+                            font.italic: materialRow.isItemActivated
+                            color: parent.ListView.isCurrentItem ? palette.highlightedText : palette.text;
+                        }
+                    }
+
+                    MouseArea
+                    {
+                        anchors.fill: parent
+                        onClicked:
+                        {
+                            parent.ListView.view.currentIndex = model.index;
+                        }
+                    }
+                }
+
+                function activateDetailsWithIndex(index)
+                {
+                    var model = materialsModel.getItem(index);
+                    base.currentItem = model;
+                    materialDetailsView.containerId = model.container_id;
+                    materialDetailsView.currentMaterialNode = model.container_node;
+
+                    detailsPanel.updateMaterialPropertiesObject();
+                }
+
+                onCurrentIndexChanged:
+                {
+                    forceActiveFocus();  // causes the changed fields to be saved
+                    activateDetailsWithIndex(currentIndex);
+                }
+            }
+        }
+
+
+        Item
+        {
+            id: detailsPanel
+
+            anchors
+            {
+                left: materialScrollView.right
+                leftMargin: UM.Theme.getSize("default_margin").width
+                top: parent.top
+                bottom: parent.bottom
+                right: parent.right
+            }
+
+            function updateMaterialPropertiesObject()
+            {
+                var currentItem = materialsModel.getItem(materialListView.currentIndex);
+
+                materialProperties.name = currentItem.name;
+                materialProperties.guid = currentItem.guid;
+
+                materialProperties.brand = currentItem.brand ? currentItem.brand : "Unknown";
+                materialProperties.material = currentItem.material ? currentItem.material : "Unknown";
+                materialProperties.color_name = currentItem.color_name ? currentItem.color_name : "Yellow";
+                materialProperties.color_code = currentItem.color_code ? currentItem.color_code : "yellow";
+
+                materialProperties.description = currentItem.description ? currentItem.description : "";
+                materialProperties.adhesion_info = currentItem.adhesion_info ? currentItem.adhesion_info : "";
+
+                materialProperties.density = currentItem.density ? currentItem.density : 0.0;
+                materialProperties.diameter = currentItem.diameter ? currentItem.diameter : 0.0;
+                materialProperties.approximate_diameter = currentItem.approximate_diameter ? currentItem.approximate_diameter : "0";
+            }
+
+            Item
+            {
+                anchors.fill: parent
+
+                Item    // Material title Label
+                {
+                    id: profileName
+
+                    width: parent.width
+                    height: childrenRect.height
+
+                    Label {
+                        text: materialProperties.name
+                        font: UM.Theme.getFont("large")
+                    }
+                }
+
+                MaterialView    // Material detailed information view below the title Label
+                {
+                    id: materialDetailsView
+                    anchors
+                    {
+                        left: parent.left
+                        right: parent.right
+                        top: profileName.bottom
+                        topMargin: UM.Theme.getSize("default_margin").height
+                        bottom: parent.bottom
+                    }
+
+                    editingEnabled: base.currentItem != null && !base.currentItem.is_read_only
+
+                    properties: materialProperties
+                    containerId: base.currentItem != null ? base.currentItem.container_id : ""
+                    currentMaterialNode: base.currentItem.container_node
+
+                    property alias pane: base
+                }
+
+                QtObject
+                {
+                    id: materialProperties
+
+                    property string guid: "00000000-0000-0000-0000-000000000000"
+                    property string name: "Unknown";
+                    property string profile_type: "Unknown";
+                    property string brand: "Unknown";
+                    property string material: "Unknown";  // This needs to be named as "material" to be consistent with
+                                                          // the material container's metadata entry
+
+                    property string color_name: "Yellow";
+                    property color color_code: "yellow";
+
+                    property real density: 0.0;
+                    property real diameter: 0.0;
+                    property string approximate_diameter: "0";
+
+                    property real spool_cost: 0.0;
+                    property real spool_weight: 0.0;
+                    property real spool_length: 0.0;
+                    property real cost_per_meter: 0.0;
+
+                    property string description: "";
+                    property string adhesion_info: "";
+                }
+            }
         }
     }
 }

@@ -1,18 +1,17 @@
 {
-    "id": "ultimaker_original_dual",
     "version": 2,
     "name": "Ultimaker Original Dual Extrusion",
     "inherits": "ultimaker",
     "metadata": {
         "visible": true,
         "author": "Ultimaker",
-        "manufacturer": "Ultimaker",
-        "category": "Ultimaker",
+        "manufacturer": "Ultimaker B.V.",
         "weight": 4,
         "file_formats": "text/x-gcode",
         "icon": "icon_ultimaker.png",
         "platform": "ultimaker_platform.stl",
         "has_materials": true,
+        "exclude_materials": ["generic_hips", "generic_petg", "generic_bam", "generic_pva", "generic_tough_pla"],
         "machine_extruder_trains":
         {
             "0": "ultimaker_original_dual_1st",
@@ -38,12 +37,6 @@
         },
         "machine_nozzle_size": {
             "default_value": 0.4
-        },
-        "machine_nozzle_heat_up_speed": {
-            "default_value": 2
-        },
-        "machine_nozzle_cool_down_speed": {
-            "default_value": 2
         },
         "machine_head_with_fans_polygon":
         {
@@ -72,14 +65,11 @@
         "machine_extruder_count": {
             "default_value": 2
         },
-        "print_sequence": {
-            "enabled": false
-        },
         "prime_tower_position_x": {
-            "default_value": 185
+            "value": "195"
         },
         "prime_tower_position_y": {
-            "default_value": 160
+            "value": "149"
         }
     }
 }

@@ -1,5 +1,5 @@
-// Copyright (c) 2016 Ultimaker B.V.
-// Uranium is released under the terms of the AGPLv3 or higher.
+// Copyright (c) 2017 Ultimaker B.V.
+// Uranium is released under the terms of the LGPLv3 or higher.
 
 import QtQuick 2.2
 import QtQuick.Controls 1.2
@@ -18,6 +18,9 @@ Item {
     width: childrenRect.width;
     height: childrenRect.height;
 
+    property var all_categories_except_support: [ "machine_settings", "resolution", "shell", "infill", "material", "speed",
+                                    "travel", "cooling", "platform_adhesion", "dual", "meshfix", "blackmagic", "experimental"]
+
     Column
     {
         id: items
@@ -29,138 +32,127 @@ Item {
         Row
         {
             spacing: UM.Theme.getSize("default_margin").width
+
             Label
             {
-                text: catalog.i18nc("@label Followed by extruder selection drop-down.", "Print model with")
-                anchors.verticalCenter: extruderSelector.verticalCenter
-
-                color: UM.Theme.getColor("setting_control_text")
+                text: catalog.i18nc("@label","Mesh Type")
                 font: UM.Theme.getFont("default")
-                visible: extruderSelector.visible
+                color: UM.Theme.getColor("text")
+                height: UM.Theme.getSize("setting").height
+                verticalAlignment: Text.AlignVCenter
             }
+
+            UM.SettingPropertyProvider
+            {
+                id: meshTypePropertyProvider
+                containerStackId: Cura.MachineManager.activeMachineId
+                watchedProperties: [ "enabled" ]
+            }
+
             ComboBox
             {
-                id: extruderSelector
-
-                model: Cura.ExtrudersModel
-                {
-                    id: extrudersModel
-                    onModelChanged: extruderSelector.color = extrudersModel.getItem(extruderSelector.currentIndex).color
+                id: meshTypeSelection
+                style: UM.Theme.styles.combobox
+                onActivated: {
+                    UM.ActiveTool.setProperty("MeshType", model.get(index).type)
                 }
-                property string color: extrudersModel.getItem(extruderSelector.currentIndex).color
-                visible: machineExtruderCount.properties.value > 1
-                textRole: "name"
-                width: UM.Theme.getSize("setting_control").width
-                height: UM.Theme.getSize("section").height
-                MouseArea
+                model: ListModel
                 {
-                    anchors.fill: parent
-                    acceptedButtons: Qt.NoButton
-                    onWheel: wheel.accepted = true;
+                    id: meshTypeModel
+                    Component.onCompleted: meshTypeSelection.populateModel()
                 }
 
-                style: ComboBoxStyle
+                function populateModel()
                 {
-                    background: Rectangle
+                    meshTypeModel.append({
+                        type:  "",
+                        text: catalog.i18nc("@label", "Normal model")
+                    });
+                    meshTypePropertyProvider.key = "support_mesh";
+                    if(meshTypePropertyProvider.properties.enabled == "True")
                     {
-                        color:
-                        {
-                            if(extruderSelector.hovered || base.activeFocus)
-                            {
-                                return UM.Theme.getColor("setting_control_highlight");
-                            }
-                            else
-                            {
-                                return UM.Theme.getColor("setting_control");
-                            }
-                        }
-                        border.width: UM.Theme.getSize("default_lining").width
-                        border.color: UM.Theme.getColor("setting_control_border")
+                        meshTypeModel.append({
+                            type:  "support_mesh",
+                            text: catalog.i18nc("@label", "Print as support")
+                        });
                     }
-                    label: Item
+                    meshTypePropertyProvider.key = "anti_overhang_mesh";
+                    if(meshTypePropertyProvider.properties.enabled == "True")
                     {
-                        Rectangle
-                        {
-                            id: swatch
-                            height: UM.Theme.getSize("setting_control").height / 2
-                            width: height
-                            anchors.left: parent.left
-                            anchors.leftMargin: UM.Theme.getSize("default_lining").width
-                            anchors.verticalCenter: parent.verticalCenter
-
-                            color: extruderSelector.color
-                            border.width: UM.Theme.getSize("default_lining").width
-                            border.color: !enabled ? UM.Theme.getColor("setting_control_disabled_border") : UM.Theme.getColor("setting_control_border")
-                        }
-                        Label
-                        {
-                            anchors.left: swatch.right
-                            anchors.leftMargin: UM.Theme.getSize("default_lining").width
-                            anchors.right: downArrow.left
-                            anchors.rightMargin: UM.Theme.getSize("default_lining").width
-                            anchors.verticalCenter: parent.verticalCenter
-
-                            text: extruderSelector.currentText
-                            font: UM.Theme.getFont("default")
-                            color: !enabled ? UM.Theme.getColor("setting_control_disabled_text") : UM.Theme.getColor("setting_control_text")
-
-                            elide: Text.ElideRight
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
-                        UM.RecolorImage
-                        {
-                            id: downArrow
-                            anchors.right: parent.right
-                            anchors.rightMargin: UM.Theme.getSize("default_lining").width * 2
-                            anchors.verticalCenter: parent.verticalCenter
-
-                            source: UM.Theme.getIcon("arrow_bottom")
-                            width: UM.Theme.getSize("standard_arrow").width
-                            height: UM.Theme.getSize("standard_arrow").height
-                            sourceSize.width: width + 5
-                            sourceSize.height: width + 5
-
-                            color: UM.Theme.getColor("setting_control_text")
-                        }
+                        meshTypeModel.append({
+                            type:  "anti_overhang_mesh",
+                            text: catalog.i18nc("@label", "Don't support overlap with other models")
+                        });
                     }
-                }
+                    meshTypePropertyProvider.key = "cutting_mesh";
+                    if(meshTypePropertyProvider.properties.enabled == "True")
+                    {
+                        meshTypeModel.append({
+                            type:  "cutting_mesh",
+                            text: catalog.i18nc("@label", "Modify settings for overlap with other models")
+                        });
+                    }
+                    meshTypePropertyProvider.key = "infill_mesh";
+                    if(meshTypePropertyProvider.properties.enabled == "True")
+                    {
+                        meshTypeModel.append({
+                            type:  "infill_mesh",
+                            text: catalog.i18nc("@label", "Modify settings for infill of other models")
+                        });
+                    }
 
-                onActivated:
-                {
-                    UM.ActiveTool.setProperty("SelectedActiveExtruder", extrudersModel.getItem(index).id);
-                    extruderSelector.color = extrudersModel.getItem(index).color;
+                    meshTypeSelection.updateCurrentIndex();
                 }
-                onModelChanged: updateCurrentIndex();
 
                 function updateCurrentIndex()
                 {
-                    for(var i = 0; i < extrudersModel.rowCount(); ++i)
+                    var mesh_type = UM.ActiveTool.properties.getValue("MeshType");
+                    meshTypeSelection.currentIndex = -1;
+                    for(var index=0; index < meshTypeSelection.model.count; index++)
                     {
-                        if(extrudersModel.getItem(i).id == UM.ActiveTool.properties.getValue("SelectedActiveExtruder"))
+                        if(meshTypeSelection.model.get(index).type == mesh_type)
                         {
-                            extruderSelector.currentIndex = i;
-                            extruderSelector.color = extrudersModel.getItem(i).color;
+                            meshTypeSelection.currentIndex = index;
                             return;
                         }
                     }
-                    extruderSelector.currentIndex = -1;
+                    meshTypeSelection.currentIndex = 0;
                 }
             }
+
+            Connections
+            {
+                target: Cura.MachineManager
+                onGlobalContainerChanged:
+                {
+                    meshTypeSelection.model.clear();
+                    meshTypeSelection.populateModel();
+                }
+            }
+
+            Connections
+            {
+                target: UM.Selection
+                onSelectionChanged: meshTypeSelection.updateCurrentIndex()
+            }
+
         }
 
         Column
         {
             // This is to ensure that the panel is first increasing in size up to 200 and then shows a scrollbar.
             // It kinda looks ugly otherwise (big panel, no content on it)
-            property int maximumHeight: 200 * Screen.devicePixelRatio
+            id: currentSettings
+            property int maximumHeight: 200 * screenScaleFactor
             height: Math.min(contents.count * (UM.Theme.getSize("section").height + UM.Theme.getSize("default_lining").height), maximumHeight)
+            visible: meshTypeSelection.model.get(meshTypeSelection.currentIndex).type != "anti_overhang_mesh"
 
             ScrollView
             {
                 height: parent.height
-                width: UM.Theme.getSize("setting").width + UM.Theme.getSize("setting").height
+                width: UM.Theme.getSize("setting").width + UM.Theme.getSize("default_margin").width
                 style: UM.Theme.styles.scrollview
+
                 ListView
                 {
                     id: contents
@@ -171,6 +163,24 @@ Item {
                         id: addedSettingsModel;
                         containerId: Cura.MachineManager.activeDefinitionId
                         expanded: [ "*" ]
+                        filter:
+                        {
+                            if (printSequencePropertyProvider.properties.value == "one_at_a_time")
+                            {
+                                return {"settable_per_meshgroup": true};
+                            }
+                            return {"settable_per_mesh": true};
+                        }
+                        exclude:
+                        {
+                            var excluded_settings = [ "support_mesh", "anti_overhang_mesh", "cutting_mesh", "infill_mesh" ];
+
+                            if(meshTypeSelection.model.get(meshTypeSelection.currentIndex).type == "support_mesh")
+                            {
+                                excluded_settings = excluded_settings.concat(base.all_categories_except_support);
+                            }
+                            return excluded_settings;
+                        }
 
                         visibilityHandler: Cura.PerObjectSettingVisibilityHandler
                         {
@@ -180,6 +190,7 @@ Item {
 
                     delegate: Row
                     {
+                        spacing: - UM.Theme.getSize("default_margin").width
                         Loader
                         {
                             id: settingLoader
@@ -189,6 +200,8 @@ Item {
                             property var definition: model
                             property var settingDefinitionsModel: addedSettingsModel
                             property var propertyProvider: provider
+                            property var globalPropertyProvider: inheritStackProvider
+                            property var externalResetHandler: false
 
                             //Qt5.4.2 and earlier has a bug where this causes a crash: https://bugreports.qt.io/browse/QTBUG-35989
                             //In addition, while it works for 5.5 and higher, the ordering of the actual combo box drop down changes,
@@ -209,12 +222,16 @@ Item {
                                 {
                                     case "int":
                                         return settingTextField
+                                    case "[int]":
+                                        return settingTextField
                                     case "float":
                                         return settingTextField
                                     case "enum":
                                         return settingComboBox
                                     case "extruder":
                                         return settingExtruder
+                                    case "optional_extruder":
+                                        return settingOptionalExtruder
                                     case "bool":
                                         return settingCheckBox
                                     case "str":
@@ -229,10 +246,10 @@ Item {
 
                         Button
                         {
-                            width: UM.Theme.getSize("setting").height / 2;
-                            height: UM.Theme.getSize("setting").height;
+                            width: Math.round(UM.Theme.getSize("setting").height / 2)
+                            height: UM.Theme.getSize("setting").height
 
-                            onClicked: addedSettingsModel.setVisible(model.key, false);
+                            onClicked: addedSettingsModel.setVisible(model.key, false)
 
                             style: ButtonStyle
                             {
@@ -242,7 +259,7 @@ Item {
                                     {
                                         anchors.verticalCenter: parent.verticalCenter
                                         width: parent.width
-                                        height: parent.height / 2
+                                        height: width
                                         sourceSize.width: width
                                         sourceSize.height: width
                                         color: control.hovered ? UM.Theme.getColor("setting_control_button_hover") : UM.Theme.getColor("setting_control_button")
@@ -252,6 +269,8 @@ Item {
                             }
                         }
 
+                        // Specialty provider that only watches global_inherits (we cant filter on what property changed we get events
+                        // so we bypass that to make a dedicated provider).
                         UM.SettingPropertyProvider
                         {
                             id: provider
@@ -263,12 +282,51 @@ Item {
                             removeUnusedValue: false
                         }
 
-                        // If the extruder by which the object needs to be printed is changed, ensure that the
-                        // display is also notified of the fact.
+                        UM.SettingPropertyProvider
+                        {
+                            id: inheritStackProvider
+                            containerStackId: UM.ActiveTool.properties.getValue("ContainerID")
+                            key: model.key
+                            watchedProperties: [ "limit_to_extruder" ]
+                        }
+
                         Connections
                         {
-                            target: extruderSelector
-                            onActivated: provider.forcePropertiesChanged()
+                            target: inheritStackProvider
+                            onPropertiesChanged:
+                            {
+                                provider.forcePropertiesChanged();
+                            }
+                        }
+
+                        Connections
+                        {
+                            target: UM.ActiveTool
+                            onPropertiesChanged:
+                            {
+                                // the values cannot be bound with UM.ActiveTool.properties.getValue() calls,
+                                // so here we connect to the signal and update the those values.
+                                if (typeof UM.ActiveTool.properties.getValue("SelectedObjectId") !== "undefined")
+                                {
+                                    const selectedObjectId = UM.ActiveTool.properties.getValue("SelectedObjectId");
+                                    if (addedSettingsModel.visibilityHandler.selectedObjectId != selectedObjectId)
+                                    {
+                                        addedSettingsModel.visibilityHandler.selectedObjectId = selectedObjectId;
+                                    }
+                                }
+                                if (typeof UM.ActiveTool.properties.getValue("ContainerID") !== "undefined")
+                                {
+                                    const containerId = UM.ActiveTool.properties.getValue("ContainerID");
+                                    if (provider.containerStackId != containerId)
+                                    {
+                                        provider.containerStackId = containerId;
+                                    }
+                                    if (inheritStackProvider.containerStackId != containerId)
+                                    {
+                                        inheritStackProvider.containerStackId = containerId;
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -277,9 +335,9 @@ Item {
 
         Button
         {
-            id: customise_settings_button;
-            height: UM.Theme.getSize("setting").height;
-            visible: parseInt(UM.Preferences.getValue("cura/active_mode")) == 1
+            id: customiseSettingsButton;
+            height: UM.Theme.getSize("setting_control").height;
+            visible: currentSettings.visible
 
             text: catalog.i18nc("@action:button", "Select settings");
 
@@ -299,19 +357,21 @@ Item {
                 {
                     text: control.text;
                     color: UM.Theme.getColor("setting_control_text");
+                    font: UM.Theme.getFont("default")
                     anchors.centerIn: parent
                 }
             }
 
-            onClicked: settingPickDialog.visible = true;
-
-            Connections
+            onClicked:
             {
-                target: UM.Preferences;
-
-                onPreferenceChanged:
+                settingPickDialog.visible = true;
+                if (meshTypeSelection.model.get(meshTypeSelection.currentIndex).type == "support_mesh")
                 {
-                    customise_settings_button.visible = parseInt(UM.Preferences.getValue("cura/active_mode"))
+                    settingPickDialog.additional_excluded_settings = base.all_categories_except_support;
+                }
+                else
+                {
+                    settingPickDialog.additional_excluded_settings = []
                 }
             }
         }
@@ -322,21 +382,45 @@ Item {
         id: settingPickDialog
 
         title: catalog.i18nc("@title:window", "Select Settings to Customize for this model")
-        width: screenScaleFactor * 360;
+        width: screenScaleFactor * 360
 
-        property string labelFilter: ""
+        property var additional_excluded_settings
 
         onVisibilityChanged:
         {
             // force updating the model to sync it with addedSettingsModel
             if(visible)
             {
+                // Set skip setting, it will prevent from resetting selected mesh_type
+                contents.model.visibilityHandler.addSkipResetSetting(meshTypeSelection.model.get(meshTypeSelection.currentIndex).type)
                 listview.model.forceUpdate()
+
+                updateFilter()
             }
         }
 
+        function updateFilter()
+        {
+            var new_filter = {};
+            if (printSequencePropertyProvider.properties.value == "one_at_a_time")
+            {
+                new_filter["settable_per_meshgroup"] = true;
+            }
+            else
+            {
+                new_filter["settable_per_mesh"] = true;
+            }
+
+            if(filterInput.text != "")
+            {
+                new_filter["i18n_label"] = "*" + filterInput.text;
+            }
+
+            listview.model.filter = new_filter;
+        }
+
         TextField {
-            id: filter
+            id: filterInput
 
             anchors {
                 top: parent.top
@@ -347,17 +431,7 @@ Item {
 
             placeholderText: catalog.i18nc("@label:textbox", "Filter...");
 
-            onTextChanged:
-            {
-                if(text != "")
-                {
-                    listview.model.filter = {"settable_per_mesh": true, "label": "*" + text}
-                }
-                else
-                {
-                    listview.model.filter = {"settable_per_mesh": true}
-                }
-            }
+            onTextChanged: settingPickDialog.updateFilter()
         }
 
         CheckBox
@@ -383,7 +457,7 @@ Item {
 
             anchors
             {
-                top: filter.bottom;
+                top: filterInput.bottom;
                 left: parent.left;
                 right: parent.right;
                 bottom: parent.bottom;
@@ -395,13 +469,14 @@ Item {
                 {
                     id: definitionsModel;
                     containerId: Cura.MachineManager.activeDefinitionId
-                    filter:
-                    {
-                        "settable_per_mesh": true
-                    }
                     visibilityHandler: UM.SettingPreferenceVisibilityHandler {}
                     expanded: [ "*" ]
-                    exclude: [ "machine_settings", "command_line_settings" ]
+                    exclude:
+                    {
+                        var excluded_settings = [ "machine_settings", "command_line_settings", "support_mesh", "anti_overhang_mesh", "cutting_mesh", "infill_mesh" ];
+                        excluded_settings = excluded_settings.concat(settingPickDialog.additional_excluded_settings);
+                        return excluded_settings;
+                    }
                 }
                 delegate:Loader
                 {
@@ -425,6 +500,7 @@ Item {
                         }
                     }
                 }
+                Component.onCompleted: settingPickDialog.updateFilter()
             }
         }
 
@@ -444,6 +520,16 @@ Item {
 
         containerStackId: Cura.MachineManager.activeMachineId
         key: "machine_extruder_count"
+        watchedProperties: [ "value" ]
+        storeIndex: 0
+    }
+
+    UM.SettingPropertyProvider
+    {
+        id: printSequencePropertyProvider
+
+        containerStackId: Cura.MachineManager.activeMachineId
+        key: "print_sequence"
         watchedProperties: [ "value" ]
         storeIndex: 0
     }
@@ -469,6 +555,13 @@ Item {
         id: settingExtruder;
 
         Cura.SettingExtruder { }
+    }
+
+    Component
+    {
+        id: settingOptionalExtruder
+
+        Cura.SettingOptionalExtruder { }
     }
 
     Component

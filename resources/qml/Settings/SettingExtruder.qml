@@ -1,9 +1,8 @@
 // Copyright (c) 2016 Ultimaker B.V.
-// Uranium is released under the terms of the AGPLv3 or higher.
+// Uranium is released under the terms of the LGPLv3 or higher.
 
-import QtQuick 2.1
-import QtQuick.Controls 1.1
-import QtQuick.Controls.Styles 1.1
+import QtQuick 2.7
+import QtQuick.Controls 2.0
 
 import UM 1.1 as UM
 import Cura 1.0 as Cura
@@ -11,21 +10,66 @@ import Cura 1.0 as Cura
 SettingItem
 {
     id: base
+    property var focusItem: control
 
     contents: ComboBox
     {
         id: control
+        anchors.fill: parent
 
         model: Cura.ExtrudersModel
         {
-            id: extruders_model
-            onModelChanged: control.color = extruders_model.getItem(control.currentIndex).color
+            onModelChanged: {
+                control.color = getItem(control.currentIndex).color;
+            }
         }
-        property string color: extruders_model.getItem(control.currentIndex).color
 
         textRole: "name"
 
-        anchors.fill: parent
+        // knowing the extruder position, try to find the item index in the model
+        function getIndexByPosition(position)
+        {
+            for (var item_index in model.items)
+            {
+                var item = model.getItem(item_index)
+                if (item.index == position)
+                {
+                    return item_index
+                }
+            }
+            return -1
+        }
+
+        onActivated:
+        {
+            if (model.getItem(index).enabled)
+            {
+                forceActiveFocus();
+                propertyProvider.setPropertyValue("value", model.getItem(index).index);
+            } else
+            {
+                currentIndex = propertyProvider.properties.value;  // keep the old value
+            }
+        }
+
+        onActiveFocusChanged:
+        {
+            if(activeFocus)
+            {
+                base.focusReceived();
+            }
+        }
+
+        Keys.onTabPressed:
+        {
+            base.setActiveFocusToNextSetting(true)
+        }
+        Keys.onBacktabPressed:
+        {
+            base.setActiveFocusToNextSetting(false)
+        }
+
+        currentIndex: propertyProvider.properties.value
 
         MouseArea
         {
@@ -34,103 +78,179 @@ SettingItem
             onWheel: wheel.accepted = true;
         }
 
-        style: ComboBoxStyle
+        property string color: "#fff"
+
+        Binding
         {
+            // We override the color property's value when the ExtruderModel changes. So we need to use an
+            // explicit binding here otherwise we do not handle value changes after the model changes.
+            target: control
+            property: "color"
+            value: control.currentText != "" ? control.model.getItem(control.currentIndex).color : ""
+        }
+
+        Binding
+        {
+            target: control
+            property: "currentIndex"
+            value:
+            {
+                if(propertyProvider.properties.value == -1)
+                {
+                    return control.getIndexByPosition(Cura.MachineManager.defaultExtruderPosition);
+                }
+                return propertyProvider.properties.value
+            }
+            // Sometimes when the value is already changed, the model is still being built.
+            // The when clause ensures that the current index is not updated when this happens.
+            when: control.model.items.length > 0
+        }
+
+        indicator: UM.RecolorImage
+        {
+            id: downArrow
+            x: control.width - width - control.rightPadding
+            y: control.topPadding + Math.round((control.availableHeight - height) / 2)
+
+            source: UM.Theme.getIcon("arrow_bottom")
+            width: UM.Theme.getSize("standard_arrow").width
+            height: UM.Theme.getSize("standard_arrow").height
+            sourceSize.width: width + 5 * screenScaleFactor
+            sourceSize.height: width + 5 * screenScaleFactor
+
+            color: UM.Theme.getColor("setting_control_text");
+        }
+
+        background: Rectangle
+        {
+            color:
+            {
+                if (!enabled)
+                {
+                    return UM.Theme.getColor("setting_control_disabled");
+                }
+                if (control.hovered || base.activeFocus)
+                {
+                    return UM.Theme.getColor("setting_control_highlight");
+                }
+                return UM.Theme.getColor("setting_control");
+            }
+            border.width: UM.Theme.getSize("default_lining").width
+            border.color:
+            {
+                if (!enabled)
+                {
+                    return UM.Theme.getColor("setting_control_disabled_border")
+                }
+                if (control.hovered || control.activeFocus)
+                {
+                    return UM.Theme.getColor("setting_control_border_highlight")
+                }
+                return UM.Theme.getColor("setting_control_border")
+            }
+        }
+
+        contentItem: Label
+        {
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.left: parent.left
+            anchors.leftMargin: UM.Theme.getSize("setting_unit_margin").width
+            anchors.right: downArrow.left
+            rightPadding: swatch.width + UM.Theme.getSize("setting_unit_margin").width
+
+            text: control.currentText
+            renderType: Text.NativeRendering
+            font: UM.Theme.getFont("default")
+            color: enabled ? UM.Theme.getColor("setting_control_text") : UM.Theme.getColor("setting_control_disabled_text")
+
+            elide: Text.ElideLeft
+            verticalAlignment: Text.AlignVCenter
+
             background: Rectangle
             {
+                id: swatch
+                height: Math.round(UM.Theme.getSize("setting_control").height / 2)
+                width: height
+
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.margins: Math.round(UM.Theme.getSize("default_margin").width / 4)
+
+                border.width: UM.Theme.getSize("default_lining").width
+                border.color: enabled ? UM.Theme.getColor("setting_control_border") : UM.Theme.getColor("setting_control_disabled_border")
+                radius: Math.round(width / 2)
+
+                color: control.color
+            }
+        }
+
+        popup: Popup {
+            y: control.height - UM.Theme.getSize("default_lining").height
+            width: control.width
+            implicitHeight: contentItem.implicitHeight
+            padding: UM.Theme.getSize("default_lining").width
+
+            contentItem: ListView {
+                clip: true
+                implicitHeight: contentHeight
+                model: control.popup.visible ? control.delegateModel : null
+                currentIndex: control.highlightedIndex
+
+                ScrollIndicator.vertical: ScrollIndicator { }
+            }
+
+            background: Rectangle {
+                color: UM.Theme.getColor("setting_control")
+                border.color: UM.Theme.getColor("setting_control_border")
+            }
+        }
+
+        delegate: ItemDelegate
+        {
+            width: control.width - 2 * UM.Theme.getSize("default_lining").width
+            height: control.height
+            highlighted: control.highlightedIndex == index
+
+            contentItem: Label
+            {
+                text: model.name
+                renderType: Text.NativeRendering
                 color:
                 {
-                    if (!enabled)
-                    {
-                        return UM.Theme.getColor("setting_control_disabled");
-                    }
-                    if(control.hovered || base.activeFocus)
-                    {
-                        return UM.Theme.getColor("setting_control_highlight");
-                    }
-                    else
-                    {
-                        return UM.Theme.getColor("setting_control");
+                    if (model.enabled) {
+                        UM.Theme.getColor("setting_control_text")
+                    } else {
+                        UM.Theme.getColor("action_button_disabled_text");
                     }
                 }
-                border.width: UM.Theme.getSize("default_lining").width
-                border.color: !enabled ? UM.Theme.getColor("setting_control_disabled_border") : control.hovered ? UM.Theme.getColor("setting_control_border_highlight") : UM.Theme.getColor("setting_control_border")
-            }
-            label: Item
-            {
-                Rectangle
+                font: UM.Theme.getFont("default")
+                elide: Text.ElideRight
+                verticalAlignment: Text.AlignVCenter
+                rightPadding: swatch.width + UM.Theme.getSize("setting_unit_margin").width
+
+                background: Rectangle
                 {
                     id: swatch
-                    height: UM.Theme.getSize("setting_control").height / 2
+                    height: Math.round(UM.Theme.getSize("setting_control").height / 2)
                     width: height
-                    anchors.left: parent.left
-                    anchors.leftMargin: UM.Theme.getSize("default_lining").width
-                    anchors.verticalCenter: parent.verticalCenter
 
-                    color: control.color
-                    border.width: UM.Theme.getSize("default_lining").width
-                    border.color: !enabled ? UM.Theme.getColor("setting_control_disabled_border") : UM.Theme.getColor("setting_control_border")
-                }
-                Label
-                {
-                    anchors.left: swatch.right
-                    anchors.leftMargin: UM.Theme.getSize("default_lining").width
-                    anchors.right: downArrow.left
-                    anchors.rightMargin: UM.Theme.getSize("default_lining").width
-                    anchors.verticalCenter: parent.verticalCenter
-
-                    text: control.currentText
-                    font: UM.Theme.getFont("default")
-                    color: !enabled ? UM.Theme.getColor("setting_control_disabled_text") : UM.Theme.getColor("setting_control_text")
-
-                    elide: Text.ElideRight
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                UM.RecolorImage
-                {
-                    id: downArrow
                     anchors.right: parent.right
-                    anchors.rightMargin: UM.Theme.getSize("default_lining").width * 2
                     anchors.verticalCenter: parent.verticalCenter
+                    anchors.margins: Math.round(UM.Theme.getSize("default_margin").width / 4)
 
-                    source: UM.Theme.getIcon("arrow_bottom")
-                    width: UM.Theme.getSize("standard_arrow").width
-                    height: UM.Theme.getSize("standard_arrow").height
-                    sourceSize.width: width + 5
-                    sourceSize.height: width + 5
+                    border.width: UM.Theme.getSize("default_lining").width
+                    border.color: enabled ? UM.Theme.getColor("setting_control_border") : UM.Theme.getColor("setting_control_disabled_border")
+                    radius: Math.round(width / 2)
 
-                    color: UM.Theme.getColor("setting_control_text")
+                    color: control.model.getItem(index).color
                 }
             }
-        }
 
-        onActivated:
-        {
-            forceActiveFocus();
-            propertyProvider.setPropertyValue("value", extruders_model.getItem(index).index);
-            control.color = extruders_model.getItem(index).color;
-        }
-        onModelChanged: updateCurrentIndex();
-
-        Connections
-        {
-            target: propertyProvider
-            onPropertiesChanged: control.updateCurrentIndex();
-        }
-
-        function updateCurrentIndex()
-        {
-            for(var i = 0; i < extruders_model.rowCount(); ++i)
+            background: Rectangle
             {
-                if(extruders_model.getItem(i).index == propertyProvider.properties.value)
-                {
-                    control.currentIndex = i;
-                    control.color = extruders_model.getItem(i).color;
-                    return;
-                }
+                color: parent.highlighted ? UM.Theme.getColor("setting_control_highlight") : "transparent"
+                border.color: parent.highlighted ? UM.Theme.getColor("setting_control_border_highlight") : "transparent"
             }
-            currentIndex = -1;
         }
     }
 }

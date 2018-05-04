@@ -1,10 +1,9 @@
 # Copyright (c) 2015 Ultimaker B.V.
 # Copyright (c) 2013 David Braam
-# Uranium is released under the terms of the AGPLv3 or higher.
+# Uranium is released under the terms of the LGPLv3 or higher.
 
 from UM.Logger import Logger
-from UM.SaveFile import SaveFile
-from cura.ProfileWriter import ProfileWriter
+from cura.ReaderWriters.ProfileWriter import ProfileWriter
 import zipfile
 
 ##  Writes profiles to Cura's own profile format with config files.

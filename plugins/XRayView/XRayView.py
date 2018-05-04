@@ -1,15 +1,22 @@
 # Copyright (c) 2015 Ultimaker B.V.
-# Cura is released under the terms of the AGPLv3 or higher.
+# Cura is released under the terms of the LGPLv3 or higher.
 
 import os.path
+from PyQt5.QtGui import QOpenGLContext
 
+from UM.Application import Application
+from UM.Logger import Logger
+from UM.Math.Color import Color
 from UM.PluginRegistry import PluginRegistry
+from UM.Platform import Platform
 from UM.Event import Event
 from UM.View.View import View
 from UM.Scene.Iterator.BreadthFirstIterator import BreadthFirstIterator
 
 from UM.View.RenderBatch import RenderBatch
 from UM.View.GL.OpenGL import OpenGL
+
+from cura.CuraApplication import CuraApplication
 
 from . import XRayPass
 
@@ -31,7 +38,7 @@ class XRayView(View):
 
         if not self._xray_shader:
             self._xray_shader = OpenGL.getInstance().createShaderProgram(os.path.join(PluginRegistry.getInstance().getPluginPath("XRayView"), "xray.shader"))
-            self._xray_shader.setUniformValue("u_color", [0.1, 0.1, 0.2, 1.0])
+            self._xray_shader.setUniformValue("u_color", Color(*Application.getInstance().getTheme().getColor("xray").getRgb()))
 
         for node in BreadthFirstIterator(scene.getRoot()):
             if not node.render(renderer):
@@ -50,14 +57,36 @@ class XRayView(View):
 
     def event(self, event):
         if event.type == Event.ViewActivateEvent:
+            # FIX: on Max OS X, somehow QOpenGLContext.currentContext() can become None during View switching.
+            # This can happen when you do the following steps:
+            #   1. Start Cura
+            #   2. Load a model
+            #   3. Switch to Custom mode
+            #   4. Select the model and click on the per-object tool icon
+            #   5. Switch view to Layer view or X-Ray
+            #   6. Cura will very likely crash
+            # It seems to be a timing issue that the currentContext can somehow be empty, but I have no clue why.
+            # This fix tries to reschedule the view changing event call on the Qt thread again if the current OpenGL
+            # context is None.
+            if Platform.isOSX():
+                if QOpenGLContext.currentContext() is None:
+                    Logger.log("d", "current context of OpenGL is empty on Mac OS X, will try to create shaders later")
+                    CuraApplication.getInstance().callLater(lambda e = event: self.event(e))
+                    return
+
             if not self._xray_pass:
                 # Currently the RenderPass constructor requires a size > 0
                 # This should be fixed in RenderPass's constructor.
                 self._xray_pass = XRayPass.XRayPass(1, 1)
-                self.getRenderer().addRenderPass(self._xray_pass)
+
+            self.getRenderer().addRenderPass(self._xray_pass)
 
             if not self._xray_composite_shader:
                 self._xray_composite_shader = OpenGL.getInstance().createShaderProgram(os.path.join(PluginRegistry.getInstance().getPluginPath("XRayView"), "xray_composite.shader"))
+                theme = Application.getInstance().getTheme()
+                self._xray_composite_shader.setUniformValue("u_background_color", Color(*theme.getColor("viewport_background").getRgb()))
+                self._xray_composite_shader.setUniformValue("u_error_color", Color(*theme.getColor("xray_error").getRgb()))
+                self._xray_composite_shader.setUniformValue("u_outline_color", Color(*theme.getColor("model_selection_outline").getRgb()))
 
             if not self._composite_pass:
                 self._composite_pass = self.getRenderer().getRenderPass("composite")
@@ -68,5 +97,6 @@ class XRayView(View):
             self._composite_pass.setCompositeShader(self._xray_composite_shader)
 
         if event.type == Event.ViewDeactivateEvent:
+            self.getRenderer().removeRenderPass(self._xray_pass)
             self._composite_pass.setLayerBindings(self._old_layer_bindings)
             self._composite_pass.setCompositeShader(self._old_composite_shader)

@@ -1,15 +1,16 @@
-# Copyright (c) 2015 Ultimaker B.V.
-# Cura is released under the terms of the AGPLv3 or higher.
+# Copyright (c) 2018 Ultimaker B.V.
+# Cura is released under the terms of the LGPLv3 or higher.
 
 import re #Regular expressions for parsing escape characters in the settings.
 import json
 
+from UM.Settings.ContainerFormatError import ContainerFormatError
 from UM.Settings.InstanceContainer import InstanceContainer
 from UM.Logger import Logger
 from UM.i18n import i18nCatalog
 catalog = i18nCatalog("cura")
 
-from cura.ProfileReader import ProfileReader
+from cura.ReaderWriters.ProfileReader import ProfileReader, NoProfileException
 
 ##  A class that reads profile data from g-code files.
 #
@@ -56,7 +57,7 @@ class GCodeProfileReader(ProfileReader):
         # TODO: Consider moving settings to the start?
         serialized = ""  # Will be filled with the serialized profile.
         try:
-            with open(file_name) as f:
+            with open(file_name, "r") as f:
                 for line in f:
                     if line.startswith(prefix):
                         # Remove the prefix and the newline from the line and add it to the rest.
@@ -66,14 +67,32 @@ class GCodeProfileReader(ProfileReader):
             return None
 
         serialized = unescapeGcodeComment(serialized)
-        Logger.log("i", "Serialized the following from %s: %s" %(file_name, repr(serialized)))
+        serialized = serialized.strip()
 
-        json_data = json.loads(serialized)
+        if not serialized:
+            Logger.log("i", "No custom profile to import from this g-code: %s", file_name)
+            raise NoProfileException()
 
-        profile_strings = [json_data["global_quality"]]
-        profile_strings.extend(json_data.get("extruder_quality", []))
+        # serialized data can be invalid JSON
+        try:
+            json_data = json.loads(serialized)
+        except Exception as e:
+            Logger.log("e", "Could not parse serialized JSON data from g-code %s, error: %s", file_name, e)
+            return None
 
-        return [readQualityProfileFromString(profile_string) for profile_string in profile_strings]
+        profiles = []
+        global_profile = readQualityProfileFromString(json_data["global_quality"])
+
+        # This is a fix for profiles created with 2.3.0 For some reason it added the "extruder" property to the
+        # global profile.
+        # The fix is simple and safe, as a global profile should never have the extruder entry.
+        if global_profile.getMetaDataEntry("extruder", None) is not None:
+            global_profile.setMetaDataEntry("extruder", None)
+        profiles.append(global_profile)
+
+        for profile_string in json_data.get("extruder_quality", []):
+            profiles.append(readQualityProfileFromString(profile_string))
+        return profiles
 
 ##  Unescape a string which has been escaped for use in a gcode comment.
 #
@@ -95,6 +114,9 @@ def readQualityProfileFromString(profile_string):
     profile = InstanceContainer("")
     try:
         profile.deserialize(profile_string)
+    except ContainerFormatError as e:
+        Logger.log("e", "Corrupt profile in this g-code file: %s", str(e))
+        return None
     except Exception as e:  # Not a valid g-code file.
         Logger.log("e", "Unable to serialise the profile: %s", str(e))
         return None

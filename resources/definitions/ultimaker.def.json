@@ -1,12 +1,13 @@
 {
-    "id": "ultimaker_base",
     "version": 2,
     "name": "Ultimaker",
     "inherits": "fdmprinter",
     "metadata": {
         "author": "Ultimaker",
-        "manufacturer": "Ultimaker",
-        "visible": false
+        "manufacturer": "Ultimaker B.V.",
+        "category": "Ultimaker",
+        "visible": false,
+        "exclude_materials": [ "generic_hips", "generic_petg" ]
     },
     "overrides": {
         "machine_max_feedrate_e": {
@@ -30,6 +31,11 @@
         {
             "minimum_value": "0",
             "maximum_value": "machine_width"
+        },
+        "relative_extrusion":
+        {
+            "value": false,
+            "enabled": false
         }
     }
 }

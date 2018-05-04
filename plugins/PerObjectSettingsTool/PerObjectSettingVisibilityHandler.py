@@ -1,25 +1,30 @@
 # Copyright (c) 2016 Ultimaker B.V.
-# Cura is released under the terms of the AGPLv3 or higher.
+# Cura is released under the terms of the LGPLv3 or higher.
 
 from PyQt5.QtCore import QObject, pyqtProperty, pyqtSignal
+from UM.FlameProfiler import pyqtSlot
 
 from UM.Application import Application
+from UM.Settings.ContainerRegistry import ContainerRegistry
 from UM.Settings.SettingInstance import SettingInstance
 from UM.Logger import Logger
-import UM.Settings.Models
+import UM.Settings.Models.SettingVisibilityHandler
 
 from cura.Settings.ExtruderManager import ExtruderManager #To get global-inherits-stack setting values from different extruders.
 from cura.Settings.SettingOverrideDecorator import SettingOverrideDecorator
 
 ##  The per object setting visibility handler ensures that only setting
 #   definitions that have a matching instance Container are returned as visible.
-class PerObjectSettingVisibilityHandler(UM.Settings.Models.SettingVisibilityHandler):
+class PerObjectSettingVisibilityHandler(UM.Settings.Models.SettingVisibilityHandler.SettingVisibilityHandler):
     def __init__(self, parent = None, *args, **kwargs):
         super().__init__(parent = parent, *args, **kwargs)
 
         self._selected_object_id = None
         self._node = None
         self._stack = None
+
+        # this is a set of settings that will be skipped if the user chooses to reset.
+        self._skip_reset_setting_set = set()
 
     def setSelectedObjectId(self, id):
         if id != self._selected_object_id:
@@ -35,6 +40,10 @@ class PerObjectSettingVisibilityHandler(UM.Settings.Models.SettingVisibilityHand
     def selectedObjectId(self):
         return self._selected_object_id
 
+    @pyqtSlot(str)
+    def addSkipResetSetting(self, setting_name):
+        self._skip_reset_setting_set.add(setting_name)
+
     def setVisible(self, visible):
         if not self._node:
             return
@@ -49,6 +58,9 @@ class PerObjectSettingVisibilityHandler(UM.Settings.Models.SettingVisibilityHand
 
         # Remove all instances that are not in visibility list
         for instance in all_instances:
+            # exceptionally skip setting
+            if instance.definition.key in self._skip_reset_setting_set:
+                continue
             if instance.definition.key not in visible:
                 settings.removeInstance(instance.definition.key)
                 visibility_changed = True
@@ -62,17 +74,20 @@ class PerObjectSettingVisibilityHandler(UM.Settings.Models.SettingVisibilityHand
                     stack_nr = -1
                     stack = None
                     # Check from what stack we should copy the raw property of the setting from.
-                    if definition.limit_to_extruder != "-1" and self._stack.getProperty("machine_extruder_count", "value") > 1:
-                        # A limit to extruder function was set and it's a multi extrusion machine. Check what stack we do need to use.
-                        stack_nr = str(int(round(float(self._stack.getProperty(item, "limit_to_extruder")))))
+                    if self._stack.getProperty("machine_extruder_count", "value") > 1:
+                        if definition.limit_to_extruder != "-1":
+                            # A limit to extruder function was set and it's a multi extrusion machine. Check what stack we do need to use.
+                            stack_nr = str(int(round(float(self._stack.getProperty(item, "limit_to_extruder")))))
 
-                    # Check if the found stack_number is in the extruder list of extruders.
-                    if stack_nr not in ExtruderManager.getInstance().extruderIds and self._stack.getProperty("extruder_nr", "value") is not None:
-                        stack_nr = -1
+                        # Check if the found stack_number is in the extruder list of extruders.
+                        if stack_nr not in ExtruderManager.getInstance().extruderIds and self._stack.getProperty("extruder_nr", "value") is not None:
+                            stack_nr = -1
 
-                    # Use the found stack number to get the right stack to copy the value from.
-                    if stack_nr in ExtruderManager.getInstance().extruderIds:
-                        stack = UM.Settings.ContainerRegistry.getInstance().findContainerStacks(id = ExtruderManager.getInstance().extruderIds[stack_nr])[0]
+                        # Use the found stack number to get the right stack to copy the value from.
+                        if stack_nr in ExtruderManager.getInstance().extruderIds:
+                            stack = ContainerRegistry.getInstance().findContainerStacks(id = ExtruderManager.getInstance().extruderIds[stack_nr])[0]
+                    else:
+                        stack = self._stack
 
                     # Use the raw property to set the value (so the inheritance doesn't break)
                     if stack is not None:

@@ -1,8 +1,8 @@
-// Copyright (c) 2016 Ultimaker B.V.
-// Cura is released under the terms of the AGPLv3 or higher.
+// Copyright (c) 2018 Ultimaker B.V.
+// Cura is released under the terms of the LGPLv3 or higher.
 
-import QtQuick 2.2
-import QtQuick.Controls 1.1
+import QtQuick 2.7
+import QtQuick.Controls 1.4
 
 import UM 1.2 as UM
 import Cura 1.0 as Cura
@@ -13,41 +13,6 @@ Menu
     title: "Material"
 
     property int extruderIndex: 0
-    property bool printerConnected: Cura.MachineManager.printerOutputDevices.length != 0
-
-    MenuItem
-    {
-        id: automaticMaterial
-        text:
-        {
-            if(printerConnected && Cura.MachineManager.printerOutputDevices[0].materialNames.length > extruderIndex)
-            {
-                var materialName = Cura.MachineManager.printerOutputDevices[0].materialNames[extruderIndex];
-                return catalog.i18nc("@title:menuitem %1 is the value from the printer", "Automatic: %1").arg(materialName);
-            }
-            return "";
-        }
-        visible: printerConnected && Cura.MachineManager.printerOutputDevices[0].materialNames.length > extruderIndex
-        onTriggered:
-        {
-            var material_id = Cura.MachineManager.printerOutputDevices[0].materialIds[extruderIndex];
-            var items = materialsModel.items;
-            // materialsModel.find cannot be used because we need to look inside the metadata property of items
-            for(var i in items)
-            {
-                if (items[i]["metadata"]["GUID"] == material_id)
-                {
-                    Cura.MachineManager.setActiveMaterial(items[i].id);
-                    break;
-                }
-            }
-        }
-    }
-
-    MenuSeparator
-    {
-        visible: automaticMaterial.visible
-    }
 
     Instantiator
     {
@@ -55,12 +20,12 @@ Menu
         MenuItem
         {
             text: model.name
-            checkable: true;
-            checked: model.id == Cura.MachineManager.activeMaterialId;
-            exclusiveGroup: group;
+            checkable: true
+            checked: model.root_material_id == Cura.MachineManager.currentRootMaterialId[extruderIndex]
+            exclusiveGroup: group
             onTriggered:
             {
-                Cura.MachineManager.setActiveMaterial(model.id);
+                Cura.MachineManager.setMaterial(extruderIndex, model.container_node);
             }
         }
         onObjectAdded: menu.insertItem(index, object)
@@ -93,12 +58,13 @@ Menu
                         MenuItem
                         {
                             text: model.name
-                            checkable: true;
-                            checked: model.id == Cura.MachineManager.activeMaterialId;
-                            exclusiveGroup: group;
+                            checkable: true
+                            checked: model.id == Cura.MachineManager.allActiveMaterialIds[Cura.ExtruderManager.extruderIds[extruderIndex]]
+                            exclusiveGroup: group
                             onTriggered:
                             {
-                                Cura.MachineManager.setActiveMaterial(model.id);
+                                var activeExtruderIndex = Cura.ExtruderManager.activeExtruderIndex;
+                                Cura.MachineManager.setMaterial(activeExtruderIndex, model.container_node);
                             }
                         }
                         onObjectAdded: brandMaterialsMenu.insertItem(index, object)
@@ -113,24 +79,16 @@ Menu
         onObjectRemoved: menu.removeItem(object)
     }
 
-    ListModel
+    Cura.GenericMaterialsModel
     {
         id: genericMaterialsModel
-        Component.onCompleted: populateMenuModels()
+        extruderPosition: menu.extruderIndex
     }
 
-    ListModel
+    Cura.BrandMaterialsModel
     {
         id: brandModel
-    }
-
-    //: Model used to populate the brandModel
-    UM.InstanceContainersModel
-    {
-        id: materialsModel
-        filter: materialFilter()
-        onModelReset: populateMenuModels()
-        onDataChanged: populateMenuModels()
+        extruderPosition: menu.extruderIndex
     }
 
     ExclusiveGroup { id: group }
@@ -138,80 +96,4 @@ Menu
     MenuSeparator { }
 
     MenuItem { action: Cura.Actions.manageMaterials }
-
-    function materialFilter()
-    {
-        var result = { "type": "material" };
-        if(Cura.MachineManager.filterMaterialsByMachine)
-        {
-            result.definition = Cura.MachineManager.activeQualityDefinitionId;
-            if(Cura.MachineManager.hasVariants)
-            {
-                result.variant = Cura.MachineManager.activeQualityVariantId;
-            }
-        }
-        else
-        {
-            result.definition = "fdmprinter";
-            result.compatible = true; //NB: Only checks for compatibility in global version of material, but we don't have machine-specific materials anyway.
-        }
-        return result;
-    }
-
-    function populateMenuModels()
-    {
-        // Create a structure of unique brands and their material-types
-        genericMaterialsModel.clear()
-        brandModel.clear();
-
-        var items = materialsModel.items;
-        var materialsByBrand = {};
-        for (var i in items) {
-            var brandName = items[i]["metadata"]["brand"];
-            var materialName = items[i]["metadata"]["material"];
-
-            if (brandName == "Generic")
-            {
-                // Add to top section
-                var materialId = items[i].id;
-                genericMaterialsModel.append({
-                    id:materialId,
-                    name:items[i].name
-                });
-            }
-            else
-            {
-                // Add to per-brand, per-material menu
-                if (!materialsByBrand.hasOwnProperty(brandName))
-                {
-                    materialsByBrand[brandName] = {};
-                }
-                if (!materialsByBrand[brandName].hasOwnProperty(materialName))
-                {
-                    materialsByBrand[brandName][materialName] = [];
-                }
-                materialsByBrand[brandName][materialName].push({
-                    id: items[i].id,
-                    name: items[i].name
-                });
-            }
-        }
-
-        for (var brand in materialsByBrand)
-        {
-            var materialsByBrandModel = [];
-            var materials = materialsByBrand[brand];
-            for (var material in materials)
-            {
-                materialsByBrandModel.push({
-                    name: material,
-                    colors: materials[material]
-                })
-            }
-            brandModel.append({
-                name: brand,
-                materials: materialsByBrandModel
-            });
-        }
-    }
 }
