@@ -10,20 +10,21 @@ Window
 {
     id: base
     property var selection: null
-    title: catalog.i18nc("@title", "Toolbox")
+    title: catalog.i18nc("@title", "Marketplace")
     modality: Qt.ApplicationModal
     flags: Qt.Dialog | Qt.CustomizeWindowHint | Qt.WindowTitleHint | Qt.WindowCloseButtonHint
 
-    width: 720 * screenScaleFactor
-    height: 640 * screenScaleFactor
-    minimumWidth: 720 * screenScaleFactor
-    maximumWidth: 720 * screenScaleFactor
-    minimumHeight: 350 * screenScaleFactor
-    color: UM.Theme.getColor("sidebar")
+    width: Math.floor(720 * screenScaleFactor)
+    height: Math.floor(640 * screenScaleFactor)
+    minimumWidth: width
+    maximumWidth: minimumWidth
+    minimumHeight: height
+    maximumHeight: minimumHeight
+    color: UM.Theme.getColor("main_background")
     UM.I18nCatalog
     {
         id: catalog
-        name:"cura"
+        name: "cura"
     }
     Item
     {
@@ -32,11 +33,12 @@ Window
         {
             id: header
         }
+
         Item
         {
             id: mainView
             width: parent.width
-            z: -1
+            z: parent.z - 1
             anchors
             {
                 top: header.bottom
@@ -74,11 +76,12 @@ Window
                 visible: toolbox.viewCategory == "installed"
             }
         }
+
         ToolboxFooter
         {
             id: footer
             visible: toolbox.restartRequired
-            height: toolbox.restartRequired ? UM.Theme.getSize("toolbox_footer").height : 0
+            height: visible ? UM.Theme.getSize("toolbox_footer").height : 0
         }
         // TODO: Clean this up:
         Connections
@@ -92,6 +95,7 @@ Window
                 licenseDialog.show();
             }
         }
+        
         ToolboxLicenseDialog
         {
             id: licenseDialog
