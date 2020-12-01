@@ -1,4 +1,4 @@
-// Copyright (c) 2018 Ultimaker B.V.
+// Copyright (c) 2020 Ultimaker B.V.
 // Cura is released under the terms of the LGPLv3 or higher.
 
 import QtQuick 2.1
@@ -12,7 +12,7 @@ import Cura 1.0 as Cura
 UM.PreferencesPage
 {
     //: General configuration page title
-    title: catalog.i18nc("@title:tab","General")
+    title: catalog.i18nc("@title:tab", "General")
     id: generalPreferencesPage
 
     function setDefaultLanguage(languageCode)
@@ -72,6 +72,9 @@ UM.PreferencesPage
         var defaultTheme = UM.Preferences.getValue("general/theme")
         setDefaultTheme(defaultTheme)
 
+        UM.Preferences.resetPreference("cura/single_instance")
+        singleInstanceCheckbox.checked = boolCheck(UM.Preferences.getValue("cura/single_instance"))
+
         UM.Preferences.resetPreference("physics/automatic_push_free")
         pushFreeCheckbox.checked = boolCheck(UM.Preferences.getValue("physics/automatic_push_free"))
         UM.Preferences.resetPreference("physics/automatic_drop_down")
@@ -86,6 +89,8 @@ UM.PreferencesPage
         prefixJobNameCheckbox.checked = boolCheck(UM.Preferences.getValue("cura/jobname_prefix"))
         UM.Preferences.resetPreference("view/show_overhang");
         showOverhangCheckbox.checked = boolCheck(UM.Preferences.getValue("view/show_overhang"))
+        UM.Preferences.resetPreference("view/show_xray_warning");
+        showXrayErrorCheckbox.checked = boolCheck(UM.Preferences.getValue("view/show_xray_warning"))
         UM.Preferences.resetPreference("view/center_on_select");
         centerOnSelectCheckbox.checked = boolCheck(UM.Preferences.getValue("view/center_on_select"))
         UM.Preferences.resetPreference("view/invert_zoom");
@@ -94,6 +99,12 @@ UM.PreferencesPage
         zoomToMouseCheckbox.checked = boolCheck(UM.Preferences.getValue("view/zoom_to_mouse"))
         UM.Preferences.resetPreference("view/top_layer_count");
         topLayerCountCheckbox.checked = boolCheck(UM.Preferences.getValue("view/top_layer_count"))
+        UM.Preferences.resetPreference("general/restore_window_geometry")
+        restoreWindowPositionCheckbox.checked = boolCheck(UM.Preferences.getValue("general/restore_window_geometry"))
+
+        UM.Preferences.resetPreference("general/camera_perspective_mode")
+        var defaultCameraMode = UM.Preferences.getValue("general/camera_perspective_mode")
+        setDefaultCameraMode(defaultCameraMode)
 
         UM.Preferences.resetPreference("cura/choice_on_profile_override")
         setDefaultDiscardOrKeepProfile(UM.Preferences.getValue("cura/choice_on_profile_override"))
@@ -123,7 +134,7 @@ UM.PreferencesPage
             Label
             {
                 font.bold: true
-                text: catalog.i18nc("@label","Interface")
+                text: catalog.i18nc("@label", "Interface")
             }
 
             GridLayout
@@ -134,7 +145,7 @@ UM.PreferencesPage
                 Label
                 {
                     id: languageLabel
-                    text: catalog.i18nc("@label","Language:")
+                    text: "Language:" //Don't translate this, to make it easier to find the language drop-down if you can't read the current language.
                 }
 
                 ComboBox
@@ -146,6 +157,7 @@ UM.PreferencesPage
 
                         Component.onCompleted: {
                             append({ text: "English", code: "en_US" })
+                            //Czech is disabled for being incomplete: append({ text: "Čeština", code: "cs_CZ" })
                             append({ text: "Deutsch", code: "de_DE" })
                             append({ text: "Español", code: "es_ES" })
                             //Finnish is disabled for being incomplete: append({ text: "Suomi", code: "fi_FI" })
@@ -324,13 +336,33 @@ UM.PreferencesPage
                     id: showOverhangCheckbox
 
                     checked: boolCheck(UM.Preferences.getValue("view/show_overhang"))
-                    onClicked: UM.Preferences.setValue("view/show_overhang",  checked)
+                    onClicked: UM.Preferences.setValue("view/show_overhang", checked)
 
                     text: catalog.i18nc("@option:check", "Display overhang");
                 }
             }
 
-            UM.TooltipArea {
+
+            UM.TooltipArea
+            {
+                width: childrenRect.width;
+                height: childrenRect.height;
+
+                text: catalog.i18nc("@info:tooltip", "Highlight missing or extraneous surfaces of the model using warning signs. The toolpaths will often be missing parts of the intended geometry.")
+
+                CheckBox
+                {
+                    id: showXrayErrorCheckbox
+
+                    checked: boolCheck(UM.Preferences.getValue("view/show_xray_warning"))
+                    onClicked: UM.Preferences.setValue("view/show_xray_warning",  checked)
+
+                    text: catalog.i18nc("@option:check", "Display model errors");
+                }
+            }
+
+            UM.TooltipArea
+            {
                 width: childrenRect.width;
                 height: childrenRect.height;
                 text: catalog.i18nc("@info:tooltip", "Moves the camera so the model is in the center of the view when a model is selected")
@@ -344,7 +376,8 @@ UM.PreferencesPage
                 }
             }
 
-            UM.TooltipArea {
+            UM.TooltipArea
+            {
                 width: childrenRect.width;
                 height: childrenRect.height;
                 text: catalog.i18nc("@info:tooltip", "Should the default zoom behavior of cura be inverted?")
@@ -354,7 +387,13 @@ UM.PreferencesPage
                     id: invertZoomCheckbox
                     text: catalog.i18nc("@action:button", "Invert the direction of camera zoom.");
                     checked: boolCheck(UM.Preferences.getValue("view/invert_zoom"))
-                    onClicked: UM.Preferences.setValue("view/invert_zoom",  checked)
+                    onClicked: {
+                        if(!checked && zoomToMouseCheckbox.checked) //Fix for Github issue Ultimaker/Cura#6490: Make sure the camera origin is in front when unchecking.
+                        {
+                            UM.Controller.setCameraOrigin("home");
+                        }
+                        UM.Preferences.setValue("view/invert_zoom", checked);
+                    }
                 }
             }
 
@@ -362,14 +401,30 @@ UM.PreferencesPage
             {
                 width: childrenRect.width;
                 height: childrenRect.height;
-                text: catalog.i18nc("@info:tooltip", "Should zooming move in the direction of the mouse?")
+                text: zoomToMouseCheckbox.enabled ? catalog.i18nc("@info:tooltip", "Should zooming move in the direction of the mouse?") : catalog.i18nc("@info:tooltip", "Zooming towards the mouse is not supported in the orthographic perspective.")
 
                 CheckBox
                 {
                     id: zoomToMouseCheckbox
-                    text: catalog.i18nc("@action:button", "Zoom toward mouse direction");
-                    checked: boolCheck(UM.Preferences.getValue("view/zoom_to_mouse"))
+                    text: catalog.i18nc("@action:button", "Zoom toward mouse direction")
+                    checked: boolCheck(UM.Preferences.getValue("view/zoom_to_mouse")) && zoomToMouseCheckbox.enabled
                     onClicked: UM.Preferences.setValue("view/zoom_to_mouse", checked)
+                    enabled: UM.Preferences.getValue("general/camera_perspective_mode") !== "orthographic"
+                }
+
+                //Because there is no signal for individual preferences, we need to manually link to the onPreferenceChanged signal.
+                Connections
+                {
+                    target: UM.Preferences
+                    onPreferenceChanged:
+                    {
+                        if(preference != "general/camera_perspective_mode")
+                        {
+                            return;
+                        }
+                        zoomToMouseCheckbox.enabled = UM.Preferences.getValue("general/camera_perspective_mode") !== "orthographic";
+                        zoomToMouseCheckbox.checked = boolCheck(UM.Preferences.getValue("view/zoom_to_mouse")) && zoomToMouseCheckbox.enabled;
+                    }
                 }
             }
 
@@ -436,6 +491,65 @@ UM.PreferencesPage
                 }
             }
 
+            UM.TooltipArea
+            {
+                width: childrenRect.width
+                height: childrenRect.height
+                text: catalog.i18nc("@info:tooltip", "Should Cura open at the location it was closed?")
+
+                CheckBox
+                {
+                    id: restoreWindowPositionCheckbox
+                    text: catalog.i18nc("@option:check", "Restore window position on start")
+                    checked: boolCheck(UM.Preferences.getValue("general/restore_window_geometry"))
+                    onCheckedChanged: UM.Preferences.setValue("general/restore_window_geometry", checked)
+                }
+            }
+
+            UM.TooltipArea
+            {
+                width: childrenRect.width
+                height: childrenRect.height
+                text: catalog.i18nc("@info:tooltip", "What type of camera rendering should be used?")
+                Column
+                {
+                    spacing: 4 * screenScaleFactor
+
+                    Label
+                    {
+                        text: catalog.i18nc("@window:text", "Camera rendering:")
+                    }
+                    ComboBox
+                    {
+                        id: cameraComboBox
+
+                        model: ListModel
+                        {
+                            id: comboBoxList
+
+                            Component.onCompleted: {
+                                append({ text: catalog.i18n("Perspective"), code: "perspective" })
+                                append({ text: catalog.i18n("Orthographic"), code: "orthographic" })
+                            }
+                        }
+
+                        currentIndex:
+                        {
+                            var code = UM.Preferences.getValue("general/camera_perspective_mode");
+                            for(var i = 0; i < comboBoxList.count; ++i)
+                            {
+                                if(model.get(i).code == code)
+                                {
+                                    return i
+                                }
+                            }
+                            return 0
+                        }
+                        onActivated: UM.Preferences.setValue("general/camera_perspective_mode", model.get(index).code)
+                    }
+                }
+            }
+
             Item
             {
                 //: Spacer
@@ -447,6 +561,21 @@ UM.PreferencesPage
             {
                 font.bold: true
                 text: catalog.i18nc("@label","Opening and saving files")
+            }
+
+            UM.TooltipArea
+            {
+                width: childrenRect.width
+                height: childrenRect.height
+                text: catalog.i18nc("@info:tooltip","Should opening files from the desktop or external applications open in the same instance of Cura?")
+
+                CheckBox
+                {
+                    id: singleInstanceCheckbox
+                    text: catalog.i18nc("@option:check","Use a single instance of Cura")
+                    checked: boolCheck(UM.Preferences.getValue("cura/single_instance"))
+                    onCheckedChanged: UM.Preferences.setValue("cura/single_instance", checked)
+                }
             }
 
             UM.TooltipArea
@@ -695,6 +824,7 @@ UM.PreferencesPage
                 }
             }
 
+            /* Multi-buildplate functionality is disabled because it's broken. See CURA-4975 for the ticket to remove it.
             Item
             {
                 //: Spacer
@@ -721,7 +851,7 @@ UM.PreferencesPage
                     checked: boolCheck(UM.Preferences.getValue("cura/use_multi_build_plate"))
                     onCheckedChanged: UM.Preferences.setValue("cura/use_multi_build_plate", checked)
                 }
-            }
+            }*/
 
             Connections
             {

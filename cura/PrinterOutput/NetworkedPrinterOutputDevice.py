@@ -7,7 +7,7 @@ from UM.Scene.SceneNode import SceneNode #For typing.
 from cura.API import Account
 from cura.CuraApplication import CuraApplication
 
-from cura.PrinterOutputDevice import PrinterOutputDevice, ConnectionState, ConnectionType
+from cura.PrinterOutput.PrinterOutputDevice import PrinterOutputDevice, ConnectionState, ConnectionType
 
 from PyQt5.QtNetwork import QHttpMultiPart, QHttpPart, QNetworkRequest, QNetworkAccessManager, QNetworkReply, QAuthenticator
 from PyQt5.QtCore import pyqtProperty, pyqtSignal, pyqtSlot, QObject, QUrl, QCoreApplication
@@ -17,6 +17,8 @@ from enum import IntEnum
 
 import os  # To get the username
 import gzip
+
+from cura.Settings.CuraContainerRegistry import CuraContainerRegistry
 
 
 class AuthState(IntEnum):
@@ -33,8 +35,6 @@ class NetworkedPrinterOutputDevice(PrinterOutputDevice):
     def __init__(self, device_id, address: str, properties: Dict[bytes, bytes], connection_type: ConnectionType = ConnectionType.NetworkConnection, parent: QObject = None) -> None:
         super().__init__(device_id = device_id, connection_type = connection_type, parent = parent)
         self._manager = None    # type: Optional[QNetworkAccessManager]
-        self._last_manager_create_time = None       # type: Optional[float]
-        self._recreate_network_manager_time = 30
         self._timeout_time = 10  # After how many seconds of no response should a timeout occur?
 
         self._last_response_time = None     # type: Optional[float]
@@ -58,8 +58,8 @@ class NetworkedPrinterOutputDevice(PrinterOutputDevice):
         self._gcode = []                    # type: List[str]
         self._connection_state_before_timeout = None    # type: Optional[ConnectionState]
 
-    def requestWrite(self, nodes: List[SceneNode], file_name: Optional[str] = None, limit_mimetypes: bool = False,
-                     file_handler: Optional[FileHandler] = None, **kwargs: str) -> None:
+    def requestWrite(self, nodes: List["SceneNode"], file_name: Optional[str] = None, limit_mimetypes: bool = False,
+                     file_handler: Optional["FileHandler"] = None, filter_by_machine: bool = False, **kwargs) -> None:
         raise NotImplementedError("requestWrite needs to be implemented")
 
     def setAuthenticationState(self, authentication_state: AuthState) -> None:
@@ -84,8 +84,8 @@ class NetworkedPrinterOutputDevice(PrinterOutputDevice):
     def _compressGCode(self) -> Optional[bytes]:
         self._compressing_gcode = True
 
-        ## Mash the data into single string
         max_chars_per_line = int(1024 * 1024 / 4)  # 1/4 MB per line.
+        """Mash the data into single string"""
         file_data_bytes_list = []
         batched_lines = []
         batched_lines_count = 0
@@ -131,12 +131,6 @@ class NetworkedPrinterOutputDevice(PrinterOutputDevice):
 
             self.setConnectionState(ConnectionState.Closed)
 
-            # We need to check if the manager needs to be re-created. If we don't, we get some issues when OSX goes to
-            # sleep.
-            if time_since_last_response > self._recreate_network_manager_time:
-                if self._last_manager_create_time is None or time() - self._last_manager_create_time > self._recreate_network_manager_time:
-                    self._createNetworkManager()
-                assert(self._manager is not None)
         elif self._connection_state == ConnectionState.Closed:
             # Go out of timeout.
             if self._connection_state_before_timeout is not None:   # sanity check, but it should never be None here
@@ -151,16 +145,18 @@ class NetworkedPrinterOutputDevice(PrinterOutputDevice):
         request.setHeader(QNetworkRequest.UserAgentHeader, self._user_agent)
         return request
 
-    ##  This method was only available privately before, but it was actually called from SendMaterialJob.py.
-    #   We now have a public equivalent as well. We did not remove the private one as plugins might be using that.
     def createFormPart(self, content_header: str, data: bytes, content_type: Optional[str] = None) -> QHttpPart:
+        """This method was only available privately before, but it was actually called from SendMaterialJob.py.
+
+        We now have a public equivalent as well. We did not remove the private one as plugins might be using that.
+        """
         return self._createFormPart(content_header, data, content_type)
 
     def _createFormPart(self, content_header: str, data: bytes, content_type: Optional[str] = None) -> QHttpPart:
         part = QHttpPart()
 
         if not content_header.startswith("form-data;"):
-            content_header = "form_data; " + content_header
+            content_header = "form-data; " + content_header
         part.setHeader(QNetworkRequest.ContentDispositionHeader, content_header)
 
         if content_type is not None:
@@ -169,8 +165,9 @@ class NetworkedPrinterOutputDevice(PrinterOutputDevice):
         part.setBody(data)
         return part
 
-    ##  Convenience function to get the username, either from the cloud or from the OS.
     def _getUserName(self) -> str:
+        """Convenience function to get the username, either from the cloud or from the OS."""
+
         # check first if we are logged in with the Ultimaker Account
         account = CuraApplication.getInstance().getCuraAPI().account  # type: Account
         if account and account.isLoggedIn:
@@ -193,15 +190,17 @@ class NetworkedPrinterOutputDevice(PrinterOutputDevice):
             self._createNetworkManager()
         assert (self._manager is not None)
 
-    ## Sends a put request to the given path.
-    #  \param url: The path after the API prefix.
-    #  \param data: The data to be sent in the body
-    #  \param content_type: The content type of the body data.
-    #  \param on_finished: The function to call when the response is received.
-    #  \param on_progress: The function to call when the progress changes. Parameters are bytes_sent / bytes_total.
     def put(self, url: str, data: Union[str, bytes], content_type: Optional[str] = "application/json",
             on_finished: Optional[Callable[[QNetworkReply], None]] = None,
             on_progress: Optional[Callable[[int, int], None]] = None) -> None:
+        """Sends a put request to the given path.
+
+        :param url: The path after the API prefix.
+        :param data: The data to be sent in the body
+        :param content_type: The content type of the body data.
+        :param on_finished: The function to call when the response is received.
+        :param on_progress: The function to call when the progress changes. Parameters are bytes_sent / bytes_total.
+        """
         self._validateManager()
 
         request = self._createEmptyRequest(url, content_type = content_type)
@@ -218,10 +217,12 @@ class NetworkedPrinterOutputDevice(PrinterOutputDevice):
         if on_progress is not None:
             reply.uploadProgress.connect(on_progress)
 
-    ## Sends a delete request to the given path.
-    #  \param url: The path after the API prefix.
-    #  \param on_finished: The function to be call when the response is received.
     def delete(self, url: str, on_finished: Optional[Callable[[QNetworkReply], None]]) -> None:
+        """Sends a delete request to the given path.
+
+        :param url: The path after the API prefix.
+        :param on_finished: The function to be call when the response is received.
+        """
         self._validateManager()
 
         request = self._createEmptyRequest(url)
@@ -234,10 +235,12 @@ class NetworkedPrinterOutputDevice(PrinterOutputDevice):
         reply = self._manager.deleteResource(request)
         self._registerOnFinishedCallback(reply, on_finished)
 
-    ## Sends a get request to the given path.
-    #  \param url: The path after the API prefix.
-    #  \param on_finished: The function to be call when the response is received.
     def get(self, url: str, on_finished: Optional[Callable[[QNetworkReply], None]]) -> None:
+        """Sends a get request to the given path.
+
+        :param url: The path after the API prefix.
+        :param on_finished: The function to be call when the response is received.
+        """
         self._validateManager()
 
         request = self._createEmptyRequest(url)
@@ -250,14 +253,18 @@ class NetworkedPrinterOutputDevice(PrinterOutputDevice):
         reply = self._manager.get(request)
         self._registerOnFinishedCallback(reply, on_finished)
 
-    ## Sends a post request to the given path.
-    #  \param url: The path after the API prefix.
-    #  \param data: The data to be sent in the body
-    #  \param on_finished: The function to call when the response is received.
-    #  \param on_progress: The function to call when the progress changes. Parameters are bytes_sent / bytes_total.
     def post(self, url: str, data: Union[str, bytes],
              on_finished: Optional[Callable[[QNetworkReply], None]],
              on_progress: Optional[Callable[[int, int], None]] = None) -> None:
+
+        """Sends a post request to the given path.
+
+        :param url: The path after the API prefix.
+        :param data: The data to be sent in the body
+        :param on_finished: The function to call when the response is received.
+        :param on_progress: The function to call when the progress changes. Parameters are bytes_sent / bytes_total.
+        """
+
         self._validateManager()
 
         request = self._createEmptyRequest(url)
@@ -315,15 +322,32 @@ class NetworkedPrinterOutputDevice(PrinterOutputDevice):
 
         self._manager = QNetworkAccessManager()
         self._manager.finished.connect(self._handleOnFinished)
-        self._last_manager_create_time = time()
         self._manager.authenticationRequired.connect(self._onAuthenticationRequired)
 
         if self._properties.get(b"temporary", b"false") != b"true":
-            CuraApplication.getInstance().getMachineManager().checkCorrectGroupName(self.getId(), self.name)
+            self._checkCorrectGroupName(self.getId(), self.name)
 
     def _registerOnFinishedCallback(self, reply: QNetworkReply, on_finished: Optional[Callable[[QNetworkReply], None]]) -> None:
         if on_finished is not None:
             self._onFinishedCallbacks[reply.url().toString() + str(reply.operation())] = on_finished
+
+    def _checkCorrectGroupName(self, device_id: str, group_name: str) -> None:
+        """This method checks if the name of the group stored in the definition container is correct.
+
+        After updating from 3.2 to 3.3 some group names may be temporary. If there is a mismatch in the name of the group
+        then all the container stacks are updated, both the current and the hidden ones.
+        """
+
+        global_container_stack = CuraApplication.getInstance().getGlobalContainerStack()
+        active_machine_network_name = CuraApplication.getInstance().getMachineManager().activeMachineNetworkKey()
+        if global_container_stack and device_id == active_machine_network_name:
+            # Check if the group_name is correct. If not, update all the containers connected to the same printer
+            if CuraApplication.getInstance().getMachineManager().activeMachineNetworkGroupName != group_name:
+                metadata_filter = {"um_network_key": active_machine_network_name}
+                containers = CuraContainerRegistry.getInstance().findContainerStacks(type="machine",
+                                                                                     **metadata_filter)
+                for container in containers:
+                    container.setMetaDataEntry("group_name", group_name)
 
     def _handleOnFinished(self, reply: QNetworkReply) -> None:
         # Due to garbage collection, we need to cache certain bits of post operations.
@@ -358,32 +382,38 @@ class NetworkedPrinterOutputDevice(PrinterOutputDevice):
     def getProperties(self):
         return self._properties
 
-    ##  Get the unique key of this machine
-    #   \return key String containing the key of the machine.
     @pyqtProperty(str, constant = True)
     def key(self) -> str:
+        """Get the unique key of this machine
+
+        :return: key String containing the key of the machine.
+        """
         return self._id
 
-    ##  The IP address of the printer.
     @pyqtProperty(str, constant = True)
     def address(self) -> str:
+        """The IP address of the printer."""
+
         return self._properties.get(b"address", b"").decode("utf-8")
 
-    ##  Name of the printer (as returned from the ZeroConf properties)
     @pyqtProperty(str, constant = True)
     def name(self) -> str:
+        """Name of the printer (as returned from the ZeroConf properties)"""
+
         return self._properties.get(b"name", b"").decode("utf-8")
 
-    ##  Firmware version (as returned from the ZeroConf properties)
     @pyqtProperty(str, constant = True)
     def firmwareVersion(self) -> str:
+        """Firmware version (as returned from the ZeroConf properties)"""
+
         return self._properties.get(b"firmware_version", b"").decode("utf-8")
 
     @pyqtProperty(str, constant = True)
     def printerType(self) -> str:
         return self._properties.get(b"printer_type", b"Unknown").decode("utf-8")
 
-    ## IP adress of this printer
     @pyqtProperty(str, constant = True)
     def ipAddress(self) -> str:
+        """IP adress of this printer"""
+
         return self._address

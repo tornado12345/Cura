@@ -8,10 +8,11 @@
         "author": "TheAssassin",
         "manufacturer": "Tevo",
         "file_formats": "text/x-gcode",
-        "platform": "prusai3_platform.stl",
+        "platform": "prusai3_platform.3mf",
         "machine_extruder_trains":
         {
-            "0": "tevo_tarantula_extruder_0"
+            "0": "tevo_tarantula_extruder_0",
+            "1": "tevo_tarantula_extruder_1"
         }
     },
 
@@ -23,7 +24,7 @@
         "machine_height": { "default_value": 200 },
         "machine_depth": { "default_value": 200 },
         "machine_center_is_zero": { "default_value": false },
-        "machine_head_polygon":
+        "machine_head_with_fans_polygon":
         {
             "default_value":
             [
@@ -33,7 +34,7 @@
                 [18, -18]
             ]
         },
-        "gantry_height": { "default_value": 55 },
+        "gantry_height": { "value": "55" },
         "machine_gcode_flavor": { "default_value": "RepRap (Marlin/Sprinter)" },
         "machine_acceleration": { "default_value": 2650 },
         "machine_max_jerk_xy": { "default_value": 15.0 },

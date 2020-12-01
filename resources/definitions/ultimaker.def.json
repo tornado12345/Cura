@@ -5,7 +5,6 @@
     "metadata": {
         "author": "Ultimaker",
         "manufacturer": "Ultimaker B.V.",
-        "category": "Ultimaker",
         "visible": false,
         "exclude_materials": [ "generic_hips", "generic_petg", "structur3d_dap100silicone" ]
     },
@@ -17,7 +16,12 @@
             "minimum_value": "0"
         },
         "material_bed_temperature": {
-            "minimum_value": "0"
+            "minimum_value": "0",
+            "maximum_value_warning": "125"
+        },
+        "material_bed_temperature_layer_0":
+        {
+            "maximum_value_warning": "125"
         },
         "material_standby_temperature": {
             "minimum_value": "0"

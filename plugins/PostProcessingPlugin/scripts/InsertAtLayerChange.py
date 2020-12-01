@@ -1,3 +1,5 @@
+# Copyright (c) 2020 Ultimaker B.V.
+# Cura is released under the terms of the LGPLv3 or higher.
 # Created by Wayne Porter
 
 from ..Script import Script
@@ -24,8 +26,8 @@ class InsertAtLayerChange(Script):
                 },
                 "gcode_to_add":
                 {
-                    "label": "GCODE to insert.",
-                    "description": "GCODE to add before or after layer change.",
+                    "label": "G-code to insert.",
+                    "description": "G-code to add before or after layer change.",
                     "type": "str",
                     "default_value": ""
                 }
@@ -37,13 +39,14 @@ class InsertAtLayerChange(Script):
         for layer in data:
             # Check that a layer is being printed
             lines = layer.split("\n")
-            if ";LAYER:" in lines[0]:
-                index = data.index(layer)
-                if self.getSettingValueByKey("insert_location") == "before":
-                    layer = gcode_to_add + layer
-                else:
-                    layer = layer + gcode_to_add
+            for line in lines:
+                if ";LAYER:" in line:
+                    index = data.index(layer)
+                    if self.getSettingValueByKey("insert_location") == "before":
+                        layer = gcode_to_add + layer
+                    else:
+                        layer = layer + gcode_to_add
 
-                data[index] = layer
-
+                    data[index] = layer
+                    break
         return data

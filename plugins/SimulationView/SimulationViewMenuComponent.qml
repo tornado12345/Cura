@@ -15,6 +15,8 @@ Cura.ExpandableComponent
 {
     id: base
 
+    dragPreferencesNamePrefix: "view/colorscheme"
+
     contentHeaderTitle: catalog.i18nc("@label", "Color scheme")
 
     Connections
@@ -110,7 +112,7 @@ Cura.ExpandableComponent
                 type_id: 1
             })
             layerViewTypes.append({
-                text: catalog.i18nc("@label:listbox", "Feedrate"),
+                text: catalog.i18nc("@label:listbox", "Speed"),
                 type_id: 2
             })
             layerViewTypes.append({
@@ -177,7 +179,6 @@ Cura.ExpandableComponent
                 height: UM.Theme.getSize("layerview_row").height + UM.Theme.getSize("default_lining").height
                 width: parent.width
                 visible: !UM.SimulationView.compatibilityMode
-                enabled: index < 4
 
                 onClicked:
                 {

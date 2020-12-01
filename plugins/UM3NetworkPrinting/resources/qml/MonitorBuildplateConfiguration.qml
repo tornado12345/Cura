@@ -1,4 +1,4 @@
-// Copyright (c) 2018 Ultimaker B.V.
+// Copyright (c) 2019 Ultimaker B.V.
 // Cura is released under the terms of the LGPLv3 or higher.
 
 import QtQuick 2.2
@@ -35,7 +35,7 @@ Item
         {
             height: parent.height
             width: 32 * screenScaleFactor // Ensure the icon is centered under the extruder icon (same width)
-            
+
             Rectangle
             {
                 anchors.centerIn: parent
@@ -56,11 +56,11 @@ Item
                 visible: buildplate
             }
         }
-        
+
         Label
         {
             id: buildplateLabel
-            color: UM.Theme.getColor("monitor_text_primary")
+            color: UM.Theme.getColor("text")
             elide: Text.ElideRight
             font: UM.Theme.getFont("default") // 12pt, regular
             text: buildplate ? buildplate : ""
@@ -69,6 +69,7 @@ Item
             // FIXED-LINE-HEIGHT:
             height: 18 * screenScaleFactor // TODO: Theme!
             verticalAlignment: Text.AlignVCenter
+            renderType: Text.NativeRendering
         }
     }
 }

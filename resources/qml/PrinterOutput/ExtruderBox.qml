@@ -1,3 +1,6 @@
+//Copyright (c) 2019 Ultimaker B.V.
+//Cura is released under the terms of the LGPLv3 or higher.
+
 import QtQuick 2.2
 import QtQuick.Controls 1.1
 import QtQuick.Controls.Styles 1.1
@@ -35,7 +38,7 @@ Item
 
         Label //Extruder name.
         {
-            text: Cura.ExtruderManager.getExtruderName(position) != "" ? Cura.ExtruderManager.getExtruderName(position) : catalog.i18nc("@label", "Extruder")
+            text: Cura.MachineManager.activeMachine.extruderList[position].name !== "" ? Cura.MachineManager.activeMachine.extruderList[position].name : catalog.i18nc("@label", "Extruder")
             color: UM.Theme.getColor("text")
             font: UM.Theme.getFont("default")
             anchors.left: parent.left
@@ -206,15 +209,15 @@ Item
                 anchors.verticalCenter: parent.verticalCenter
                 renderType: Text.NativeRendering
 
-                Component.onCompleted:
+                text:
                 {
                     if (!extruderTemperature.properties.value)
                     {
-                        text = "";
+                        return "";
                     }
                     else
                     {
-                        text = extruderTemperature.properties.value;
+                        return extruderTemperature.properties.value;
                     }
                 }
             }

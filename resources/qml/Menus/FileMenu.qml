@@ -29,7 +29,8 @@ Menu
     MenuItem
     {
         id: saveWorkspaceMenu
-        text: catalog.i18nc("@title:menu menubar:file", "&Save...")
+        shortcut: StandardKey.Save
+        text: catalog.i18nc("@title:menu menubar:file", "&Save Project...")
         onTriggered:
         {
             var args = { "filter_by_machine": false, "file_type": "workspace", "preferred_mimetypes": "application/vnd.ms-package.3dmanufacturing-3dmodel+xml" };

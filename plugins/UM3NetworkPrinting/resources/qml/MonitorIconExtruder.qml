@@ -1,4 +1,4 @@
-// Copyright (c) 2018 Ultimaker B.V.
+// Copyright (c) 2019 Ultimaker B.V.
 // Cura is released under the terms of the LGPLv3 or higher.
 
 import QtQuick 2.2
@@ -39,7 +39,7 @@ Item
     {
         id: positionLabel
         font: UM.Theme.getFont("small")
-        color: UM.Theme.getColor("monitor_text_primary")
+        color: UM.Theme.getColor("text")
         height: Math.round(size / 2)
         horizontalAlignment: Text.AlignHCenter
         text: position + 1
@@ -48,5 +48,6 @@ Item
         x: Math.round(size * 0.25)
         y: Math.round(size * 0.15625)
         visible: position >= 0
+        renderType: Text.NativeRendering
     }
 }

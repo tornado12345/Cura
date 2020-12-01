@@ -1,8 +1,7 @@
 # Copyright (c) 2017 Ultimaker B.V.
 # Cura is released under the terms of the LGPLv3 or higher.
-from typing import Set
 
-from PyQt5.QtCore import QObject, pyqtSignal, pyqtProperty, pyqtSlot
+from PyQt5.QtCore import QObject, pyqtSignal, pyqtProperty
 
 from UM.Application import Application
 
@@ -39,8 +38,8 @@ class SimpleModeSettingsManager(QObject):
         user_setting_keys.update(global_stack.userChanges.getAllKeys())
 
         # check user settings in the extruder stacks
-        if global_stack.extruders:
-            for extruder_stack in global_stack.extruders.values():
+        if global_stack.extruderList:
+            for extruder_stack in global_stack.extruderList:
                 user_setting_keys.update(extruder_stack.userChanges.getAllKeys())
 
         # remove settings that are visible in recommended (we don't show the reset button for those)

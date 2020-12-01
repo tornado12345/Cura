@@ -1,4 +1,4 @@
-// Copyright (c) 2018 Ultimaker B.V.
+// Copyright (c) 2019 Ultimaker B.V.
 // Cura is released under the terms of the LGPLv3 or higher.
 
 import QtQuick 2.3
@@ -81,7 +81,7 @@ Item
                     mipmap: true
                 }
             }
-            
+
 
             Item
             {
@@ -90,7 +90,7 @@ Item
                     verticalCenter: parent.verticalCenter
                 }
                 width: 180 * screenScaleFactor // TODO: Theme!
-                height: printerNameLabel.height + printerFamilyPill.height + 6 * screenScaleFactor // TODO: Theme!
+                height: childrenRect.height
 
                 Rectangle
                 {
@@ -99,11 +99,11 @@ Item
                     height: 18 * screenScaleFactor // TODO: Theme!
                     width: parent.width
                     radius: 2 * screenScaleFactor // TODO: Theme!
-                    
+
                     Label
                     {
                         text: printer && printer.name ? printer.name : ""
-                        color: UM.Theme.getColor("monitor_text_primary")
+                        color: UM.Theme.getColor("text")
                         elide: Text.ElideRight
                         font: UM.Theme.getFont("large") // 16pt, bold
                         width: parent.width
@@ -112,6 +112,7 @@ Item
                         // FIXED-LINE-HEIGHT:
                         height: parent.height
                         verticalAlignment: Text.AlignVCenter
+                        renderType: Text.NativeRendering
                     }
                 }
 
@@ -129,10 +130,57 @@ Item
                     anchors
                     {
                         top: printerNameLabel.bottom
-                        topMargin: 6 * screenScaleFactor // TODO: Theme!
+                        topMargin: UM.Theme.getSize("narrow_margin").height
                         left: printerNameLabel.left
                     }
                     text: printer ? printer.type : ""
+                }
+                Item
+                {
+                    id: managePrinterLink
+                    anchors {
+                        top: printerFamilyPill.bottom
+                        topMargin: UM.Theme.getSize("narrow_margin").height
+                    }
+                    height: 18 * screenScaleFactor // TODO: Theme!
+                    width: childrenRect.width
+  
+                    Label
+                    {
+                        id: managePrinterText
+                        anchors.verticalCenter: managePrinterLink.verticalCenter
+                        color: UM.Theme.getColor("text_link")
+                        font: UM.Theme.getFont("default")
+                        text: catalog.i18nc("@label link to Connect and Cloud interfaces", "Manage printer")
+                        renderType: Text.NativeRendering
+                    }
+                    UM.RecolorImage
+                    {
+                        id: externalLinkIcon
+                        anchors
+                        {
+                            left: managePrinterText.right
+                            leftMargin: UM.Theme.getSize("narrow_margin").width
+                            verticalCenter: managePrinterText.verticalCenter
+                        }
+                        color: UM.Theme.getColor("text_link")
+                        source: UM.Theme.getIcon("external_link")
+                        width: 12 * screenScaleFactor
+                        height: 12 * screenScaleFactor
+                    }
+                }
+                MouseArea
+                {
+                    anchors.fill: managePrinterLink
+                    onClicked: OutputDevice.openPrintJobControlPanel()
+                    onEntered:
+                    {
+                        manageQueueText.font.underline = true
+                    }
+                    onExited:
+                    {
+                        manageQueueText.font.underline = false
+                    }
                 }
             }
 
@@ -140,14 +188,13 @@ Item
             {
                 id: printerConfiguration
                 anchors.verticalCenter: parent.verticalCenter
-                buildplate: printer ? "Glass" : null // 'Glass' as a default
+                buildplate: printer ? catalog.i18nc("@label", "Glass") : null // 'Glass' as a default
                 configurations:
                 {
                     var configs = []
                     if (printer)
                     {
-                        configs.push(printer.printerConfiguration.extruderConfigurations[0])
-                        configs.push(printer.printerConfiguration.extruderConfigurations[1])
+                        configs = configs.concat(printer.printerConfiguration.extruderConfigurations)
                     }
                     else
                     {
@@ -171,8 +218,7 @@ Item
             }
             width: 36 * screenScaleFactor // TODO: Theme!
             height: 36 * screenScaleFactor // TODO: Theme!
-            enabled: !cloudConnection
-            
+            enabled: OutputDevice.supportsPrintJobActions
             onClicked: enabled ? contextMenu.switchPopupState() : {}
             visible:
             {
@@ -205,7 +251,7 @@ Item
         MonitorInfoBlurb
         {
             id: contextMenuDisabledInfo
-            text: catalog.i18nc("@info", "These options are not available because you are monitoring a cloud printer.")
+            text: catalog.i18nc("@info", "Please update your printer's firmware to manage the queue remotely.")
             target: contextMenuButton
         }
 
@@ -225,7 +271,8 @@ Item
         }
 
         // For cloud printing, add this mouse area over the disabled cameraButton to indicate that it's not available
-        MouseArea
+        //Warning message is commented out because it's factually incorrect. Fix CURA-7637 to allow camera connections via cloud.
+        /* MouseArea
         {
             id: cameraDisabledButtonArea
             anchors.fill: cameraButton
@@ -235,14 +282,14 @@ Item
             enabled: !cameraButton.enabled
         }
 
+
         MonitorInfoBlurb
         {
             id: cameraDisabledInfo
             text: catalog.i18nc("@info", "The webcam is not available because you are monitoring a cloud printer.")
             target: cameraButton
-        }
+        }*/
     }
-
 
     // Divider
     Rectangle
@@ -294,27 +341,37 @@ Item
                 {
                     verticalCenter: parent.verticalCenter
                 }
-                color: printer ? UM.Theme.getColor("monitor_text_primary") : UM.Theme.getColor("monitor_text_disabled")
+                color: printer ? UM.Theme.getColor("text") : UM.Theme.getColor("monitor_text_disabled")
                 font: UM.Theme.getFont("large_bold") // 16pt, bold
                 text: {
                     if (!printer) {
                         return catalog.i18nc("@label:status", "Loading...")
                     }
-                    if (printer && printer.state == "disabled")
+                    if (printer.state == "disabled")
                     {
                         return catalog.i18nc("@label:status", "Unavailable")
                     }
-                    if (printer && printer.state == "unreachable")
+                    if (printer.state == "unreachable")
                     {
                         return catalog.i18nc("@label:status", "Unreachable")
                     }
-                    if (printer && !printer.activePrintJob && printer.state == "idle")
+                    if (!printer.activePrintJob && printer.state == "idle")
                     {
                         return catalog.i18nc("@label:status", "Idle")
+                    }
+                    if (!printer.activePrintJob && printer.state == "pre_print")
+                    {
+                        return catalog.i18nc("@label:status", "Preparing...")
+                    }
+                    if (!printer.activePrintJob && printer.state == "printing")
+                    {
+                        // The print job isn't quite updated yet.
+                        return catalog.i18nc("@label:status", "Printing")
                     }
                     return ""
                 }
                 visible: text !== ""
+                renderType: Text.NativeRendering
             }
 
             Item
@@ -347,7 +404,7 @@ Item
                 Label
                 {
                     id: printerJobNameLabel
-                    color: printer && printer.activePrintJob && printer.activePrintJob.isActive ? UM.Theme.getColor("monitor_text_primary") : UM.Theme.getColor("monitor_text_disabled")
+                    color: printer && printer.activePrintJob && printer.activePrintJob.isActive ? UM.Theme.getColor("text") : UM.Theme.getColor("monitor_text_disabled")
                     elide: Text.ElideRight
                     font: UM.Theme.getFont("large") // 16pt, bold
                     text: printer && printer.activePrintJob ? printer.activePrintJob.name : catalog.i18nc("@label", "Untitled")
@@ -356,6 +413,7 @@ Item
                     // FIXED-LINE-HEIGHT:
                     height: 18 * screenScaleFactor // TODO: Theme!
                     verticalAlignment: Text.AlignVCenter
+                    renderType: Text.NativeRendering
                 }
 
                 Label
@@ -364,10 +422,10 @@ Item
                     anchors
                     {
                         top: printerJobNameLabel.bottom
-                        topMargin: 6 * screenScaleFactor // TODO: Theme!
+                        topMargin: UM.Theme.getSize("narrow_margin").height
                         left: printerJobNameLabel.left
                     }
-                    color: printer && printer.activePrintJob && printer.activePrintJob.isActive ? UM.Theme.getColor("monitor_text_primary") : UM.Theme.getColor("monitor_text_disabled")
+                    color: printer && printer.activePrintJob && printer.activePrintJob.isActive ? UM.Theme.getColor("text") : UM.Theme.getColor("monitor_text_disabled")
                     elide: Text.ElideRight
                     font: UM.Theme.getFont("default") // 12pt, regular
                     text: printer && printer.activePrintJob ? printer.activePrintJob.owner : catalog.i18nc("@label", "Anonymous")
@@ -376,6 +434,7 @@ Item
                     // FIXED-LINE-HEIGHT:
                     height: 18 * screenScaleFactor // TODO: Theme!
                     verticalAlignment: Text.AlignVCenter
+                    renderType: Text.NativeRendering
                 }
             }
 
@@ -398,11 +457,12 @@ Item
                 font: UM.Theme.getFont("default")
                 text: catalog.i18nc("@label:status", "Requires configuration changes")
                 visible: printer && printer.activePrintJob && printer.activePrintJob.configurationChanges.length > 0 && !printerStatus.visible
-                color: UM.Theme.getColor("monitor_text_primary")
+                color: UM.Theme.getColor("text")
 
                 // FIXED-LINE-HEIGHT:
                 height: 18 * screenScaleFactor // TODO: Theme!
                 verticalAlignment: Text.AlignVCenter
+                renderType: Text.NativeRendering
             }
         }
 
@@ -433,15 +493,35 @@ Item
                 anchors.bottomMargin: 2 * screenScaleFactor // TODO: Theme!
                 color: UM.Theme.getColor("monitor_secondary_button_text")
                 font: UM.Theme.getFont("medium") // 14pt, regular
-                text: catalog.i18nc("@action:button","Details");
+                text: catalog.i18nc("@action:button", "Details");
                 verticalAlignment: Text.AlignVCenter
                 horizontalAlignment: Text.AlignHCenter
                 height: 18 * screenScaleFactor // TODO: Theme!
+                renderType: Text.NativeRendering
             }
             implicitHeight: 32 * screenScaleFactor // TODO: Theme!
             implicitWidth: 96 * screenScaleFactor // TODO: Theme!
             visible: printer && printer.activePrintJob && printer.activePrintJob.configurationChanges.length > 0 && !printerStatus.visible
             onClicked: base.enabled ? overrideConfirmationDialog.open() : {}
+            enabled: OutputDevice.supportsPrintJobActions
+        }
+
+        // For cloud printing, add this mouse area over the disabled details button to indicate that it's not available
+        MouseArea
+        {
+            id: detailsButtonDisabledButtonArea
+            anchors.fill: detailsButton
+            hoverEnabled: detailsButton.visible && !detailsButton.enabled
+            onEntered: overrideButtonDisabledInfo.open()
+            onExited: overrideButtonDisabledInfo.close()
+            enabled: !detailsButton.enabled
+        }
+
+        MonitorInfoBlurb
+        {
+            id: overrideButtonDisabledInfo
+            text: catalog.i18nc("@info", "Please update your printer's firmware to manage the queue remotely.")
+            target: detailsButton
         }
     }
 

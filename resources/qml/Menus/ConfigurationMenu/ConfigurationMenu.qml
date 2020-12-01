@@ -1,9 +1,10 @@
 // Copyright (c) 2018 Ultimaker B.V.
 // Cura is released under the terms of the LGPLv3 or higher.
 
-import QtQuick 2.7
-import QtQuick.Controls 2.0
+import QtQuick 2.10
+import QtQuick.Controls 2.3
 import QtQuick.Controls.Styles 1.4
+import QtQuick.Layouts 1.3
 
 import UM 1.2 as UM
 import Cura 1.0 as Cura
@@ -32,79 +33,80 @@ Cura.ExpandablePopup
     }
 
     contentPadding: UM.Theme.getSize("default_lining").width
-    enabled: Cura.MachineManager.hasMaterials || Cura.MachineManager.hasVariants || Cura.MachineManager.hasVariantBuildplates; //Only let it drop down if there is any configuration that you could change.
+    enabled: Cura.MachineManager.activeMachine ? Cura.MachineManager.activeMachine.hasMaterials || Cura.MachineManager.activeMachine.hasVariants || Cura.MachineManager.activeMachine.hasVariantBuildplates : false; //Only let it drop down if there is any configuration that you could change.
 
     headerItem: Item
     {
         // Horizontal list that shows the extruders and their materials
-        ListView
+        RowLayout
         {
-            id: extrudersList
-
-            orientation: ListView.Horizontal
             anchors.fill: parent
-            model: extrudersModel
-            visible: Cura.MachineManager.hasMaterials
-
-            delegate: Item
+            visible: Cura.MachineManager.activeMachine ? Cura.MachineManager.activeMachine.hasMaterials : false
+            Repeater
             {
-                height: parent.height
-                width: Math.round(ListView.view.width / extrudersModel.count)
-
-                // Extruder icon. Shows extruder index and has the same color as the active material.
-                Cura.ExtruderIcon
+                model: extrudersModel
+                delegate: Item
                 {
-                    id: extruderIcon
-                    materialColor: model.color
-                    extruderEnabled: model.enabled
-                    height: parent.height
-                    width: height
-                }
+                    Layout.preferredWidth: Math.round(parent.width / extrudersModel.count)
+                    Layout.fillHeight: true
 
-                // Label for the brand of the material
-                Label
-                {
-                    id: typeAndBrandNameLabel
-
-                    text: model.material_brand + " " + model.material
-                    elide: Text.ElideRight
-                    font: UM.Theme.getFont("default")
-                    color: UM.Theme.getColor("text")
-                    renderType: Text.NativeRendering
-
-                    anchors
+                    // Extruder icon. Shows extruder index and has the same color as the active material.
+                    Cura.ExtruderIcon
                     {
-                        top: extruderIcon.top
-                        left: extruderIcon.right
-                        leftMargin: UM.Theme.getSize("default_margin").width
-                        right: parent.right
-                        rightMargin: UM.Theme.getSize("default_margin").width
+                        id: extruderIcon
+                        materialColor: model.color
+                        extruderEnabled: model.enabled
+                        height: parent.height
+                        width: height
                     }
-                }
-                // Label that shows the name of the variant
-                Label
-                {
-                    id: variantLabel
 
-                    visible: Cura.MachineManager.hasVariants
-
-                    text: model.variant
-                    elide: Text.ElideRight
-                    font: UM.Theme.getFont("default_bold")
-                    color: UM.Theme.getColor("text")
-                    renderType: Text.NativeRendering
-
-                    anchors
+                    // Label for the brand of the material
+                    Label
                     {
-                        left: extruderIcon.right
-                        leftMargin: UM.Theme.getSize("default_margin").width
-                        top: typeAndBrandNameLabel.bottom
+                        id: typeAndBrandNameLabel
+
+                        text: model.material_brand + " " + model.material
+                        elide: Text.ElideRight
+                        font: UM.Theme.getFont("default")
+                        color: UM.Theme.getColor("text")
+                        renderType: Text.NativeRendering
+
+                        anchors
+                        {
+                            top: extruderIcon.top
+                            left: extruderIcon.right
+                            leftMargin: UM.Theme.getSize("default_margin").width
+                            right: parent.right
+                            rightMargin: UM.Theme.getSize("default_margin").width
+                        }
+                    }
+                    // Label that shows the name of the variant
+                    Label
+                    {
+                        id: variantLabel
+
+                        visible: Cura.MachineManager.activeMachine ? Cura.MachineManager.activeMachine.hasVariants : false
+
+                        text: model.variant
+                        elide: Text.ElideRight
+                        font: UM.Theme.getFont("default_bold")
+                        color: UM.Theme.getColor("text")
+                        renderType: Text.NativeRendering
+
+                        anchors
+                        {
+                            left: extruderIcon.right
+                            leftMargin: UM.Theme.getSize("default_margin").width
+                            top: typeAndBrandNameLabel.bottom
+                            right: parent.right
+                            rightMargin:  UM.Theme.getSize("default_margin").width
+                        }
                     }
                 }
             }
         }
 
-        //Placeholder text if there is a configuration to select but no materials (so we can't show the materials per extruder).
+        // Placeholder text if there is a configuration to select but no materials (so we can't show the materials per extruder).
         Label
         {
             text: catalog.i18nc("@label", "Select configuration")
@@ -113,7 +115,7 @@ Cura.ExpandablePopup
             color: UM.Theme.getColor("text")
             renderType: Text.NativeRendering
 
-            visible: !Cura.MachineManager.hasMaterials && (Cura.MachineManager.hasVariants || Cura.MachineManager.hasVariantBuildplates)
+            visible: Cura.MachineManager.activeMachine ? !Cura.MachineManager.activeMachine.hasMaterials && (Cura.MachineManager.activeMachine.hasVariants || Cura.MachineManager.activeMachine.hasVariantBuildplates) : false
 
             anchors
             {
@@ -138,7 +140,7 @@ Cura.ExpandablePopup
 
         onVisibleChanged:
         {
-            is_connected = Cura.MachineManager.activeMachineHasRemoteConnection && Cura.MachineManager.printerConnected && Cura.MachineManager.printerOutputDevices[0].uniqueConfigurations.length > 0 //Re-evaluate.
+            is_connected = Cura.MachineManager.activeMachine.hasRemoteConnection && Cura.MachineManager.printerConnected && Cura.MachineManager.printerOutputDevices[0].uniqueConfigurations.length > 0 //Re-evaluate.
 
             // If the printer is not connected or does not have configurations, we switch always to the custom mode. If is connected instead, the auto mode
             // or the previous state is selected
@@ -172,59 +174,6 @@ Cura.ExpandablePopup
             {
                 id: customConfiguration
                 visible: popupItem.configuration_method == ConfigurationMenu.ConfigurationMethod.Custom
-            }
-        }
-
-        Item
-        {
-            height: visible ? childrenRect.height: 0
-            anchors.right: parent.right
-            anchors.rightMargin: UM.Theme.getSize("default_margin").width
-            width: childrenRect.width + UM.Theme.getSize("default_margin").width
-            visible: popupItem.configuration_method == ConfigurationMenu.ConfigurationMethod.Custom
-            UM.RecolorImage
-            {
-                id: externalLinkIcon
-                anchors.left: parent.left
-                anchors.leftMargin: UM.Theme.getSize("default_margin").width
-                height: materialInfoLabel.height
-                width: height
-                sourceSize.height: width
-                color: UM.Theme.getColor("text_link")
-                source: UM.Theme.getIcon("external_link")
-            }
-
-            Label
-            {
-                id: materialInfoLabel
-                wrapMode: Text.WordWrap
-                text: catalog.i18nc("@label", "See the material compatibility chart")
-                font: UM.Theme.getFont("default")
-                color: UM.Theme.getColor("text_link")
-                linkColor: UM.Theme.getColor("text_link")
-                anchors.left: externalLinkIcon.right
-                anchors.leftMargin: UM.Theme.getSize("narrow_margin").width
-                renderType: Text.NativeRendering
-
-                MouseArea
-                {
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    onClicked:
-                    {
-                        // open the material URL with web browser
-                        var url = "https://ultimaker.com/incoming-links/cura/material-compatibilty"
-                        Qt.openUrlExternally(url)
-                    }
-                    onEntered:
-                    {
-                        materialInfoLabel.font.underline = true
-                    }
-                    onExited:
-                    {
-                        materialInfoLabel.font.underline = false
-                    }
-                }
             }
         }
 

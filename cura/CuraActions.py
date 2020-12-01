@@ -3,7 +3,7 @@
 
 from PyQt5.QtCore import QObject, QUrl
 from PyQt5.QtGui import QDesktopServices
-from typing import List, TYPE_CHECKING, cast
+from typing import List, cast
 
 from UM.Event import CallFunctionEvent
 from UM.FlameProfiler import pyqtSlot
@@ -23,9 +23,8 @@ from cura.Settings.ExtruderManager import ExtruderManager
 from cura.Operations.SetBuildPlateNumberOperation import SetBuildPlateNumberOperation
 
 from UM.Logger import Logger
+from UM.Scene.SceneNode import SceneNode
 
-if TYPE_CHECKING:
-    from UM.Scene.SceneNode import SceneNode
 
 class CuraActions(QObject):
     def __init__(self, parent: QObject = None) -> None:
@@ -41,12 +40,13 @@ class CuraActions(QObject):
 
     @pyqtSlot()
     def openBugReportPage(self) -> None:
-        event = CallFunctionEvent(self._openUrl, [QUrl("https://github.com/Ultimaker/Cura/issues")], {})
+        event = CallFunctionEvent(self._openUrl, [QUrl("https://github.com/Ultimaker/Cura/issues/new/choose")], {})
         cura.CuraApplication.CuraApplication.getInstance().functionEvent(event)
 
-    ##  Reset camera position and direction to default
     @pyqtSlot()
     def homeCamera(self) -> None:
+        """Reset camera position and direction to default"""
+
         scene = cura.CuraApplication.CuraApplication.getInstance().getController().getScene()
         camera = scene.getActiveCamera()
         if camera:
@@ -55,9 +55,10 @@ class CuraActions(QObject):
             camera.setPerspective(True)
             camera.lookAt(Vector(0, 0, 0))
 
-    ##  Center all objects in the selection
     @pyqtSlot()
     def centerSelection(self) -> None:
+        """Center all objects in the selection"""
+
         operation = GroupedOperation()
         for node in Selection.getAllSelectedObjects():
             current_node = node
@@ -74,18 +75,21 @@ class CuraActions(QObject):
             operation.addOperation(center_operation)
         operation.push()
 
-    ##  Multiply all objects in the selection
-    #
-    #   \param count The number of times to multiply the selection.
     @pyqtSlot(int)
     def multiplySelection(self, count: int) -> None:
+        """Multiply all objects in the selection
+
+        :param count: The number of times to multiply the selection.
+        """
+
         min_offset = cura.CuraApplication.CuraApplication.getInstance().getBuildVolume().getEdgeDisallowedSize() + 2  # Allow for some rounding errors
         job = MultiplyObjectsJob(Selection.getAllSelectedObjects(), count, min_offset = max(min_offset, 8))
         job.start()
 
-    ##  Delete all selected objects.
     @pyqtSlot()
     def deleteSelection(self) -> None:
+        """Delete all selected objects."""
+
         if not cura.CuraApplication.CuraApplication.getInstance().getController().getToolsEnabled():
             return
 
@@ -107,11 +111,13 @@ class CuraActions(QObject):
 
         op.push()
 
-    ##  Set the extruder that should be used to print the selection.
-    #
-    #   \param extruder_id The ID of the extruder stack to use for the selected objects.
     @pyqtSlot(str)
     def setExtruderForSelection(self, extruder_id: str) -> None:
+        """Set the extruder that should be used to print the selection.
+
+        :param extruder_id: The ID of the extruder stack to use for the selected objects.
+        """
+
         operation = GroupedOperation()
 
         nodes_to_change = []

@@ -1,4 +1,4 @@
-// Copyright (c) 2018 Ultimaker B.V.
+// Copyright (c) 2019 Ultimaker B.V.
 // Cura is released under the terms of the LGPLv3 or higher.
 
 import QtQuick 2.3
@@ -23,7 +23,7 @@ Item
 
     height: centerSection.height
     width: maximumWidth
-    
+
     // Enable keyboard navigation
     Keys.onLeftPressed: navigateTo(currentIndex - 1)
     Keys.onRightPressed: navigateTo(currentIndex + 1)
@@ -97,7 +97,7 @@ Item
                 height: width // TODO: Theme!
                 sourceSize.width: width // TODO: Theme!
                 sourceSize.height: width // TODO: Theme!
-                color: UM.Theme.getColor("monitor_text_primary")
+                color: UM.Theme.getColor("text")
                 source: UM.Theme.getIcon("arrow_left")
             }
         }
@@ -131,7 +131,7 @@ Item
                 }
             }
             spacing: 60 * screenScaleFactor // TODO: Theme!
-            
+
             Repeater
             {
                 model: printers
@@ -176,7 +176,7 @@ Item
                 height: width // TODO: Theme!
                 sourceSize.width: width // TODO: Theme!
                 sourceSize.height: width // TODO: Theme!
-                color: UM.Theme.getColor("monitor_text_primary")
+                color: UM.Theme.getColor("text")
                 source: UM.Theme.getIcon("arrow_right")
             }
         }

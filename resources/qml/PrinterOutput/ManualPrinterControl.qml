@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Ultimaker B.V.
+// Copyright (c) 2019 Ultimaker B.V.
 // Cura is released under the terms of the LGPLv3 or higher.
 
 import QtQuick 2.10
@@ -90,16 +90,16 @@ Item
                     verticalAlignment: Text.AlignVCenter
                     horizontalAlignment: Text.AlignHCenter
 
-                    Layout.row: 1
-                    Layout.column: 2
+                    Layout.row: 0
+                    Layout.column: 1
                     Layout.preferredWidth: width
                     Layout.preferredHeight: height
                 }
 
                 Button
                 {
-                    Layout.row: 2
-                    Layout.column: 2
+                    Layout.row: 1
+                    Layout.column: 1
                     Layout.preferredWidth: width
                     Layout.preferredHeight: height
                     iconSource: UM.Theme.getIcon("arrow_top");
@@ -115,8 +115,8 @@ Item
 
                 Button
                 {
-                    Layout.row: 3
-                    Layout.column: 1
+                    Layout.row: 2
+                    Layout.column: 0
                     Layout.preferredWidth: width
                     Layout.preferredHeight: height
                     iconSource: UM.Theme.getIcon("arrow_left");
@@ -132,8 +132,8 @@ Item
 
                 Button
                 {
-                    Layout.row: 3
-                    Layout.column: 3
+                    Layout.row: 2
+                    Layout.column: 2
                     Layout.preferredWidth: width
                     Layout.preferredHeight: height
                     iconSource: UM.Theme.getIcon("arrow_right");
@@ -149,8 +149,8 @@ Item
 
                 Button
                 {
-                    Layout.row: 4
-                    Layout.column: 2
+                    Layout.row: 3
+                    Layout.column: 1
                     Layout.preferredWidth: width
                     Layout.preferredHeight: height
                     iconSource: UM.Theme.getIcon("arrow_bottom");
@@ -166,8 +166,8 @@ Item
 
                 Button
                 {
-                    Layout.row: 3
-                    Layout.column: 2
+                    Layout.row: 2
+                    Layout.column: 1
                     Layout.preferredWidth: width
                     Layout.preferredHeight: height
                     iconSource: UM.Theme.getIcon("home");
@@ -357,13 +357,16 @@ Item
 
                         onHoveredChanged:
                         {
-                            if (containsMouse) {
+                            if (containsMouse)
+                            {
                                 base.showTooltip(
                                     base,
-                                    { x: 0, y: customCommandControlMouseArea.mapToItem(base, 0, 0).y },
+                                    { x: -tooltip.width, y: customCommandControlMouseArea.mapToItem(base, 0, 0).y },
                                     catalog.i18nc("@tooltip of G-code command input", "Send a custom G-code command to the connected printer. Press 'enter' to send the command.")
                                 )
-                            } else {
+                            }
+                            else
+                            {
                                 base.hideTooltip()
                             }
                         }

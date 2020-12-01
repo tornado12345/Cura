@@ -1,4 +1,4 @@
-// Copyright (c) 2018 Ultimaker B.V.
+// Copyright (c) 2019 Ultimaker B.V.
 // Cura is released under the terms of the LGPLv3 or higher.
 
 import QtQuick 2.2
@@ -56,8 +56,8 @@ Item
         Label
         {
             id: materialLabel
-            
-            color: UM.Theme.getColor("monitor_text_primary")
+
+            color: UM.Theme.getColor("text")
             elide: Text.ElideRight
             font: UM.Theme.getFont("default") // 12pt, regular
             text: ""
@@ -66,6 +66,7 @@ Item
             // FIXED-LINE-HEIGHT:
             height: parent.height
             verticalAlignment: Text.AlignVCenter
+            renderType: Text.NativeRendering
         }
     }
 
@@ -85,8 +86,8 @@ Item
         Label
         {
             id: printCoreLabel
-            
-            color: UM.Theme.getColor("monitor_text_primary")
+
+            color: UM.Theme.getColor("text")
             elide: Text.ElideRight
             font: UM.Theme.getFont("default_bold") // 12pt, bold
             text: ""
@@ -95,6 +96,7 @@ Item
             // FIXED-LINE-HEIGHT:
             height: parent.height
             verticalAlignment: Text.AlignVCenter
+            renderType: Text.NativeRendering
         }
     }
 }

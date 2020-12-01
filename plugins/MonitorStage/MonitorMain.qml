@@ -12,12 +12,20 @@ Rectangle
     id: viewportOverlay
 
     property bool isConnected: Cura.MachineManager.activeMachineHasNetworkConnection || Cura.MachineManager.activeMachineHasCloudConnection
-    property bool isNetworkConfigurable: ["Ultimaker 3", "Ultimaker 3 Extended", "Ultimaker S5"].indexOf(Cura.MachineManager.activeMachineDefinitionName) > -1
+    property bool isNetworkConfigurable:
+    {
+        if(Cura.MachineManager.activeMachine === null)
+        {
+            return false
+        }
+        return Cura.MachineManager.activeMachine.supportsNetworkConnection
+    }
+
     property bool isNetworkConfigured:
     {
         // Readability:
         var connectedTypes = [2, 3];
-        var types = Cura.MachineManager.activeMachineConfiguredConnectionTypes
+        var types = Cura.MachineManager.activeMachine.configuredConnectionTypes
 
         // Check if configured connection types includes either 2 or 3 (LAN or cloud)
         for (var i = 0; i < types.length; i++)
@@ -89,16 +97,15 @@ Rectangle
                 horizontalCenter: parent.horizontalCenter
             }
             visible: isNetworkConfigured && !isConnected
-            text: catalog.i18nc("@info", "Please make sure your printer has a connection:\n- Check if the printer is turned on.\n- Check if the printer is connected to the network.")
+            text: catalog.i18nc("@info", "Please make sure your printer has a connection:\n- Check if the printer is turned on.\n- Check if the printer is connected to the network.\n- Check if you are signed in to discover cloud-connected printers.")
             font: UM.Theme.getFont("medium")
-            color: UM.Theme.getColor("monitor_text_primary")
+            color: UM.Theme.getColor("text")
             wrapMode: Text.WordWrap
             lineHeight: UM.Theme.getSize("monitor_text_line_large").height
             lineHeightMode: Text.FixedHeight
             width: contentWidth
         }
 
-        // CASE 3: CAN NOT MONITOR
         Label
         {
             id: noNetworkLabel
@@ -106,26 +113,10 @@ Rectangle
             {
                 horizontalCenter: parent.horizontalCenter
             }
-            visible: !isNetworkConfigured
-            text: catalog.i18nc("@info", "Please select a network connected printer to monitor.")
-            font: UM.Theme.getFont("medium")
-            color: UM.Theme.getColor("monitor_text_primary")
-            wrapMode: Text.WordWrap
-            width: contentWidth
-            lineHeight: UM.Theme.getSize("monitor_text_line_large").height
-            lineHeightMode: Text.FixedHeight
-        }
-        Label
-        {
-            id: noNetworkUltimakerLabel
-            anchors
-            {
-                horizontalCenter: parent.horizontalCenter
-            }
             visible: !isNetworkConfigured && isNetworkConfigurable
-            text: catalog.i18nc("@info", "Please connect your Ultimaker printer to your local network.")
+            text: catalog.i18nc("@info", "Please connect your printer to the network.")
             font: UM.Theme.getFont("medium")
-            color: UM.Theme.getColor("monitor_text_primary")
+            color: UM.Theme.getColor("text")
             wrapMode: Text.WordWrap
             width: contentWidth
             lineHeight: UM.Theme.getSize("monitor_text_line_large").height
@@ -135,7 +126,7 @@ Rectangle
         {
             anchors
             {
-                left: noNetworkUltimakerLabel.left
+                left: noNetworkLabel.left
             }
             visible: !isNetworkConfigured && isNetworkConfigurable
             height: UM.Theme.getSize("monitor_text_line").height
@@ -145,7 +136,7 @@ Rectangle
             {
                 id: externalLinkIcon
                 anchors.verticalCenter: parent.verticalCenter
-                color: UM.Theme.getColor("monitor_text_link")
+                color: UM.Theme.getColor("text_link")
                 source: UM.Theme.getIcon("external_link")
                 width: UM.Theme.getSize("monitor_external_link_icon").width
                 height: UM.Theme.getSize("monitor_external_link_icon").height
@@ -159,9 +150,8 @@ Rectangle
                     leftMargin: UM.Theme.getSize("narrow_margin").width
                     verticalCenter: externalLinkIcon.verticalCenter
                 }
-                color: UM.Theme.getColor("monitor_text_link")
-                font: UM.Theme.getFont("medium") // 14pt, regular
-                linkColor: UM.Theme.getColor("monitor_text_link")
+                color: UM.Theme.getColor("text_link")
+                font: UM.Theme.getFont("medium")
                 text: catalog.i18nc("@label link to technical assistance", "View user manuals online")
                 renderType: Text.NativeRendering
             }
@@ -170,14 +160,8 @@ Rectangle
                 anchors.fill: parent
                 hoverEnabled: true
                 onClicked: Qt.openUrlExternally("https://ultimaker.com/en/resources/manuals/ultimaker-3d-printers")
-                onEntered:
-                {
-                    manageQueueText.font.underline = true
-                }
-                onExited:
-                {
-                    manageQueueText.font.underline = false
-                }
+                onEntered: manageQueueText.font.underline = true
+                onExited: manageQueueText.font.underline = false
             }
         }
     }

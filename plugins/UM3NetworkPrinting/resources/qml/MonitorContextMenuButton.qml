@@ -1,4 +1,4 @@
-// Copyright (c) 2018 Ultimaker B.V.
+// Copyright (c) 2019 Ultimaker B.V.
 // Cura is released under the terms of the LGPLv3 or higher.
 
 import QtQuick 2.3
@@ -18,11 +18,12 @@ Button
         width: base.width
     }
     contentItem: Label {
-        color: enabled ? UM.Theme.getColor("monitor_text_primary") : UM.Theme.getColor("monitor_text_disabled")
+        color: enabled ? UM.Theme.getColor("text") : UM.Theme.getColor("monitor_text_disabled")
         font.pixelSize: 32 * screenScaleFactor
         horizontalAlignment: Text.AlignHCenter
         text: base.text
         verticalAlignment: Text.AlignVCenter
+        renderType: Text.NativeRendering;
     }
     height: width
     hoverEnabled: enabled

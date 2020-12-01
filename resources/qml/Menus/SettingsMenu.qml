@@ -1,8 +1,8 @@
-// Copyright (c) 2018 Ultimaker B.V.
-// Cura is released under the terms of the LGPLv3 or higher.
+//Copyright (c) 2020 Ultimaker B.V.
+//Cura is released under the terms of the LGPLv3 or higher.
 
 import QtQuick 2.2
-import QtQuick.Controls 1.1
+import QtQuick.Controls 1.4
 
 import UM 1.2 as UM
 import Cura 1.0 as Cura
@@ -14,24 +14,29 @@ Menu
 
     PrinterMenu { title: catalog.i18nc("@title:menu menubar:settings", "&Printer") }
 
-    onAboutToShow: extruderInstantiator.active = true
-    onAboutToHide: extruderInstantiator.active = false
+    property var activeMachine: Cura.MachineManager.activeMachine
     Instantiator
     {
         id: extruderInstantiator
-        model: Cura.MachineManager.activeMachine.extruderList
-        active: false
-        asynchronous: true
+        model: activeMachine == null ? null : activeMachine.extruderList
         Menu
         {
             title: modelData.name
-
-            NozzleMenu { title: Cura.MachineManager.activeDefinitionVariantsName; visible: Cura.MachineManager.hasVariants; extruderIndex: index }
-            MaterialMenu { title: catalog.i18nc("@title:menu", "&Material"); visible: Cura.MachineManager.hasMaterials; extruderIndex: index }
+            property var extruder: (base.activeMachine === null) ? null : activeMachine.extruderList[model.index]
+            NozzleMenu { title: Cura.MachineManager.activeDefinitionVariantsName; visible: Cura.MachineManager.activeMachine.hasVariants; extruderIndex: index }
+            MaterialMenu
+            {
+                title: catalog.i18nc("@title:menu", "&Material")
+                visible: Cura.MachineManager.activeMachine.hasMaterials
+                extruderIndex: index
+                updateModels: false
+                onAboutToShow: updateModels = true
+                onAboutToHide: updateModels = false
+            }
 
             MenuSeparator
             {
-                visible: Cura.MachineManager.hasVariants || Cura.MachineManager.hasMaterials
+                visible: Cura.MachineManager.activeMachine.hasVariants || Cura.MachineManager.activeMachine.hasMaterials
             }
 
             MenuItem
@@ -44,14 +49,14 @@ Menu
             {
                 text: catalog.i18nc("@action:inmenu", "Enable Extruder")
                 onTriggered: Cura.MachineManager.setExtruderEnabled(model.index, true)
-                visible: !Cura.MachineManager.getExtruder(model.index).isEnabled
+                visible: (extruder === null || extruder === undefined) ? false : !extruder.isEnabled
             }
 
             MenuItem
             {
                 text: catalog.i18nc("@action:inmenu", "Disable Extruder")
-                onTriggered: Cura.MachineManager.setExtruderEnabled(model.index, false)
-                visible: Cura.MachineManager.getExtruder(model.index).isEnabled
+                onTriggered: Cura.MachineManager.setExtruderEnabled(index, false)
+                visible: (extruder === null || extruder === undefined) ? false : extruder.isEnabled
                 enabled: Cura.MachineManager.numberExtrudersEnabled > 1
             }
 
@@ -59,14 +64,6 @@ Menu
         onObjectAdded: base.insertItem(index, object)
         onObjectRemoved: base.removeItem(object)
     }
-
-    // TODO Only show in dev mode. Remove check when feature ready
-    BuildplateMenu
-    {
-        title: catalog.i18nc("@title:menu", "&Build plate")
-        visible: CuraSDKVersion == "dev" && Cura.MachineManager.hasVariantBuildplates
-    }
-    ProfileMenu { title: catalog.i18nc("@title:settings", "&Profile") }
 
     MenuSeparator { }
 

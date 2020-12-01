@@ -35,7 +35,8 @@ Item
     property color headerActiveColor: UM.Theme.getColor("secondary")
     property color headerHoverColor: UM.Theme.getColor("action_button_hovered")
 
-    property alias enabled: mouseArea.enabled
+    property alias mouseArea: headerMouseArea
+    property alias enabled: headerMouseArea.enabled
 
     // Text to show when this component is disabled
     property alias disabledText: disabledLabel.text
@@ -139,6 +140,16 @@ Item
             anchors.fill: parent
             visible: base.enabled
 
+            MouseArea
+            {
+                id: headerMouseArea
+                anchors.fill: parent
+                onClicked: toggleContent()
+                hoverEnabled: true
+                onEntered: background.color = headerHoverColor
+                onExited: background.color = base.enabled ? headerBackgroundColor : UM.Theme.getColor("disabled")
+            }
+
             Loader
             {
                 id: headerItemLoader
@@ -180,15 +191,6 @@ Item
             }
         }
 
-        MouseArea
-        {
-            id: mouseArea
-            anchors.fill: parent
-            onClicked: toggleContent()
-            hoverEnabled: true
-            onEntered: background.color = headerHoverColor
-            onExited: background.color = base.enabled ? headerBackgroundColor : UM.Theme.getColor("disabled")
-        }
     }
 
     DropShadow
@@ -225,6 +227,7 @@ Item
             border.width: UM.Theme.getSize("default_lining").width
             border.color: UM.Theme.getColor("lining")
             radius: UM.Theme.getSize("default_radius").width
+            height: contentItem.implicitHeight || content.height
         }
 
         contentItem: Item {}

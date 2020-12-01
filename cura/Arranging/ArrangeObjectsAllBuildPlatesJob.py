@@ -1,4 +1,4 @@
-# Copyright (c) 2018 Ultimaker B.V.
+# Copyright (c) 2019 Ultimaker B.V.
 # Cura is released under the terms of the LGPLv3 or higher.
 
 from UM.Application import Application
@@ -18,8 +18,9 @@ from cura.Arranging.ShapeArray import ShapeArray
 from typing import List
 
 
-##  Do arrangements on multiple build plates (aka builtiplexer)
 class ArrangeArray:
+    """Do arrangements on multiple build plates (aka builtiplexer)"""
+
     def __init__(self, x: int, y: int, fixed_nodes: List[SceneNode]) -> None:
         self._x = x
         self._y = y
@@ -29,7 +30,7 @@ class ArrangeArray:
         self._has_empty = False
         self._arrange = []  # type: List[Arrange]
 
-    def _update_first_empty(self):
+    def _updateFirstEmpty(self):
         for i, a in enumerate(self._arrange):
             if a.isEmpty:
                 self._first_empty = i
@@ -42,13 +43,12 @@ class ArrangeArray:
         new_arrange = Arrange.create(x = self._x, y = self._y, fixed_nodes = self._fixed_nodes)
         self._arrange.append(new_arrange)
         self._count += 1
-        self._update_first_empty()
+        self._updateFirstEmpty()
 
     def count(self):
         return self._count
 
     def get(self, index):
-        print(self._arrange)
         return self._arrange[index]
 
     def getFirstEmpty(self):

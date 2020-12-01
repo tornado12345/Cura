@@ -70,8 +70,8 @@ Item
         OldControls.ToolButton
         {
             id: printerTypeSelector
-            text: Cura.MachineManager.activeMachineDefinitionName
-            tooltip: Cura.MachineManager.activeMachineDefinitionName
+            text: Cura.MachineManager.activeMachine !== null ? Cura.MachineManager.activeMachine.definition.name: ""
+            tooltip: text
             height: UM.Theme.getSize("print_setup_big_item").height
             width: Math.round(parent.width * 0.7) + UM.Theme.getSize("default_margin").width
             anchors.right: parent.right
@@ -201,11 +201,11 @@ Item
                     return paddedWidth - textWidth - UM.Theme.getSize("print_setup_big_item").height * 0.5 - UM.Theme.getSize("default_margin").width
                 }
             }
-            property string instructionLink: Cura.ContainerManager.getContainerMetaDataEntry(Cura.MachineManager.activeStack.material.id, "instruction_link", "")
+            property string instructionLink: Cura.MachineManager.activeStack != null ? Cura.ContainerManager.getContainerMetaDataEntry(Cura.MachineManager.activeStack.material.id, "instruction_link", ""): ""
 
             Row
             {
-                height: visible ? childrenRect.height : 0
+                height: visible ? UM.Theme.getSize("setting_control").height : 0
                 visible: extrudersModel.count > 1  // If there is only one extruder, there is no point to enable/disable that.
 
                 Label
@@ -221,10 +221,18 @@ Item
 
                 OldControls.CheckBox
                 {
-                    checked: Cura.MachineManager.activeStack != null ? Cura.MachineManager.activeStack.isEnabled : false
+                    id: enabledCheckbox
                     enabled: !checked || Cura.MachineManager.numberExtrudersEnabled > 1 //Disable if it's the last enabled extruder.
-                    height: UM.Theme.getSize("setting_control").height
+                    height: parent.height
                     style: UM.Theme.styles.checkbox
+
+                    Binding
+                    {
+                        target: enabledCheckbox
+                        property: "checked"
+                        value: Cura.MachineManager.activeStack.isEnabled
+                        when: Cura.MachineManager.activeStack != null
+                    }
 
                     /* Use a MouseArea to process the click on this checkbox.
                        This is necessary because actually clicking the checkbox
@@ -234,16 +242,25 @@ Item
                     MouseArea
                     {
                         anchors.fill: parent
-                        onClicked: Cura.MachineManager.setExtruderEnabled(Cura.ExtruderManager.activeExtruderIndex, !parent.checked)
-                        enabled: parent.enabled
+                        onClicked:
+                        {
+                            if(!parent.enabled)
+                            {
+                                return
+                            }
+                            // Already update the visual indication
+                            parent.checked = !parent.checked
+                            // Update the settings on the background!
+                            Cura.MachineManager.setExtruderEnabled(Cura.ExtruderManager.activeExtruderIndex, parent.checked)
+                        }
                     }
                 }
             }
 
             Row
             {
-                height: visible ? childrenRect.height: 0
-                visible: Cura.MachineManager.hasMaterials
+                height: visible ? UM.Theme.getSize("print_setup_big_item").height : 0
+                visible: Cura.MachineManager.activeMachine ? Cura.MachineManager.activeMachine.hasMaterials : false
 
                 Label
                 {
@@ -265,9 +282,10 @@ Item
 
                     text: Cura.MachineManager.activeStack !== null ? Cura.MachineManager.activeStack.material.name : ""
                     tooltip: text
+                    enabled: enabledCheckbox.checked
 
                     width: selectors.controlWidth
-                    height: UM.Theme.getSize("print_setup_big_item").height
+                    height: parent.height
 
                     style: UM.Theme.styles.print_setup_header_button
                     activeFocusOnPress: true
@@ -302,8 +320,8 @@ Item
 
             Row
             {
-                height: visible ? childrenRect.height: 0
-                visible: Cura.MachineManager.hasVariants
+                height: visible ? UM.Theme.getSize("print_setup_big_item").height : 0
+                visible: Cura.MachineManager.activeMachine ? Cura.MachineManager.activeMachine.hasVariants : false
 
                 Label
                 {
@@ -319,12 +337,13 @@ Item
                 OldControls.ToolButton
                 {
                     id: variantSelection
-                    text: Cura.MachineManager.activeVariantName
-                    tooltip: Cura.MachineManager.activeVariantName
-                    height: UM.Theme.getSize("print_setup_big_item").height
+                    text: Cura.MachineManager.activeStack != null ? Cura.MachineManager.activeStack.variant.name : ""
+                    tooltip: text
+                    height: parent.height
                     width: selectors.controlWidth
                     style: UM.Theme.styles.print_setup_header_button
-                    activeFocusOnPress: true;
+                    activeFocusOnPress: true
+                    enabled: enabledCheckbox.checked
 
                     menu: Cura.NozzleMenu { extruderIndex: Cura.ExtruderManager.activeExtruderIndex }
                 }
